@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   Badge,
-  Card,
-  CardHeader,
+  Section,
+  SectionHeader,
   Code,
   Empty,
   Meter,
@@ -87,20 +87,20 @@ export function ReportView({ runId }: { runId: string }) {
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl space-y-5 px-5 py-7 pb-20">
+      <div className="pb-20">
         {/* ---------- headline ---------- */}
-        <div>
+        <div className="border-b border-base-850 px-6 py-7">
           <h1 className="text-2xl font-semibold tracking-tight text-base-100">
             Test quality report
           </h1>
-          <p className="mt-1 text-sm text-base-500">
+          <p className="mt-1.5 text-sm text-base-500">
             {report.scenariosPlanned} scenarios planned · {report.scenariosGenerated}{" "}
             generated · {report.replans} re-plan · {report.healAttempts} heal attempts ·{" "}
             {formatDuration(report.durationMs)} · {formatUsd(report.costUsd)}
           </p>
         </div>
 
-        <Card className="grid divide-base-800 sm:grid-cols-3 sm:divide-x lg:grid-cols-6">
+        <Section className="grid divide-base-850 sm:grid-cols-3 sm:divide-x lg:grid-cols-6">
           <Stat
             label="Coverage"
             value={`${report.coverageScore}`}
@@ -132,11 +132,11 @@ export function ReportView({ runId }: { runId: string }) {
             hint="critical untested"
             tone="warn"
           />
-        </Card>
+        </Section>
 
         {/* ---------- bugs ---------- */}
-        <Card>
-          <CardHeader
+        <Section>
+          <SectionHeader
             title="Genuine application defects"
             subtitle="Classified as app bugs, so the Healer was deliberately withheld and these tests stay red"
             right={<Badge tone="danger">{report.bugs.length} filed</Badge>}
@@ -171,11 +171,11 @@ export function ReportView({ runId }: { runId: string }) {
               ))}
             </ul>
           )}
-        </Card>
+        </Section>
 
         {/* ---------- scenarios ---------- */}
-        <Card>
-          <CardHeader
+        <Section>
+          <SectionHeader
             title="Scenarios covered"
             subtitle="Every planned flow and what happened to it"
           />
@@ -200,7 +200,7 @@ export function ReportView({ runId }: { runId: string }) {
                   const triage = report.triage.find((t) => t.testId === `t-${s.id}`);
                   return (
                     <tr key={s.id} className="align-top">
-                      <td className="px-4 py-2.5">
+                      <td className="px-6 py-2.5">
                         <span className="text-[13px] text-base-200">{s.title}</span>
                         {triage ? (
                           <span className="mt-1 block text-[11px] text-base-500">
@@ -228,7 +228,7 @@ export function ReportView({ runId }: { runId: string }) {
                       <td className="px-3 py-2.5">
                         <Badge tone={STATUS_TONE[status]}>{status}</Badge>
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono text-[11px] text-base-500">
+                      <td className="px-6 py-2.5 text-right font-mono text-[11px] text-base-500">
                         {result?.durationMs ? formatDuration(result.durationMs) : "—"}
                       </td>
                     </tr>
@@ -237,11 +237,11 @@ export function ReportView({ runId }: { runId: string }) {
               </tbody>
             </table>
           </div>
-        </Card>
+        </Section>
 
         {/* ---------- healer ---------- */}
-        <Card>
-          <CardHeader
+        <Section>
+          <SectionHeader
             title="Healer actions"
             subtitle="Locators and waits may change. Assertions may not — patches that weaken one are rejected."
             right={<Badge tone="ember">{report.heals.length} attempts</Badge>}
@@ -270,18 +270,18 @@ export function ReportView({ runId }: { runId: string }) {
               </li>
             ))}
           </ul>
-        </Card>
+        </Section>
 
         {/* ---------- risk + gaps ---------- */}
-        <div className="grid gap-5 lg:grid-cols-2">
-          <Card>
-            <CardHeader
+        <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-base-850">
+          <Section>
+            <SectionHeader
               title="Untested flow risk"
               subtitle="Surfaces we found but never exercised, ranked by what it costs you"
             />
             <ul className="divide-y divide-base-850">
               {report.risks.map((r) => (
-                <li key={r.id} className="px-4 py-3">
+                <li key={r.id} className="px-6 py-3.5">
                   <div className="flex items-center gap-2">
                     <Badge tone={PRIORITY_TONE[r.risk]}>{r.risk}</Badge>
                     <span className="min-w-0 flex-1 truncate text-[13px] text-base-200">
@@ -292,7 +292,7 @@ export function ReportView({ runId }: { runId: string }) {
                     </span>
                   </div>
                   <Meter
-                    className="mt-2"
+                    className="mt-2.5 max-w-md"
                     value={r.score}
                     tone={PRIORITY_TONE[r.risk]}
                     label={`Risk score for ${r.surface}`}
@@ -307,11 +307,11 @@ export function ReportView({ runId }: { runId: string }) {
                 </li>
               ))}
             </ul>
-          </Card>
+          </Section>
 
-          <div className="space-y-5">
-            <Card>
-              <CardHeader
+          <div>
+            <Section>
+              <SectionHeader
                 title="Remaining coverage gaps"
                 subtitle="Known and accepted — not silently dropped"
               />
@@ -320,7 +320,7 @@ export function ReportView({ runId }: { runId: string }) {
               ) : (
                 <ul className="divide-y divide-base-850">
                   {report.remainingGaps.map((g) => (
-                    <li key={g.id} className="px-4 py-3">
+                    <li key={g.id} className="px-6 py-3.5">
                       <div className="flex items-center gap-2">
                         <Badge tone={PRIORITY_TONE[g.severity]}>{g.severity}</Badge>
                         <span className="text-[13px] text-base-200">{g.title}</span>
@@ -332,11 +332,11 @@ export function ReportView({ runId }: { runId: string }) {
                   ))}
                 </ul>
               )}
-            </Card>
+            </Section>
 
             {report.prd ? (
-              <Card>
-                <CardHeader
+              <Section>
+                <SectionHeader
                   title="PRD traceability"
                   subtitle="Every stated requirement, and whether a test proves it"
                   right={
@@ -347,7 +347,7 @@ export function ReportView({ runId }: { runId: string }) {
                 />
                 <ul className="divide-y divide-base-850">
                   {report.prd.map((r) => (
-                    <li key={r.id} className="flex items-start gap-2.5 px-4 py-2.5">
+                    <li key={r.id} className="flex items-start gap-2.5 px-6 py-2.5">
                       <span
                         className={cn(
                           "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border text-[10px]",
@@ -370,15 +370,15 @@ export function ReportView({ runId }: { runId: string }) {
                     </li>
                   ))}
                 </ul>
-              </Card>
+              </Section>
             ) : (
-              <Card className="p-4">
+              <Section className="p-4">
                 <p className="text-xs leading-relaxed text-base-500">
                   No PRD was supplied for this run. Attach one on the launcher to get a
                   requirement-by-requirement traceability matrix showing exactly which
                   stated requirements have no test behind them.
                 </p>
-              </Card>
+              </Section>
             )}
           </div>
         </div>

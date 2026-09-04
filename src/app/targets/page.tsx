@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { Badge, Card, Meter, type Tone } from "@/components/ui/primitives";
+import { Badge, Section, Meter, type Tone } from "@/components/ui/primitives";
 import { RUN_HISTORY, TARGETS, type Target } from "@/lib/mock-fleet";
 import { formatRelative, hostOf } from "@/lib/format";
 
@@ -21,7 +21,7 @@ export default function TargetsPage() {
         actions={
           <Link
             href="/new"
-            className="rounded-lg border border-base-800 px-3.5 py-2 text-[13px] text-base-300 transition hover:border-base-700 hover:text-base-100"
+            className="rounded-md border border-base-800 px-3.5 py-2 text-[13px] text-base-300 transition hover:border-base-700 hover:text-base-100"
           >
             Add target
           </Link>
@@ -29,11 +29,11 @@ export default function TargetsPage() {
       />
 
       <PageBody>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid md:grid-cols-2 xl:grid-cols-3">
           {TARGETS.map((t) => {
             const runs = RUN_HISTORY.filter((r) => r.targetId === t.id);
             return (
-              <Card key={t.id} className="flex flex-col p-4">
+              <Section key={t.id} className="flex flex-col px-6 py-5 md:border-r md:border-base-850">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="truncate text-sm font-semibold text-base-100">
@@ -46,7 +46,7 @@ export default function TargetsPage() {
                   <Badge tone={ENV_TONE[t.env]}>{t.env}</Badge>
                 </div>
 
-                <div className="mt-3 flex flex-wrap gap-1.5">
+                <div className="mt-3.5 flex flex-wrap gap-1.5">
                   <Badge tone={t.authed ? "ok" : "neutral"}>
                     {t.authed ? "authenticated" : "no auth"}
                   </Badge>
@@ -54,7 +54,7 @@ export default function TargetsPage() {
                   {t.prd ? <Badge tone="violet">PRD linked</Badge> : null}
                 </div>
 
-                <div className="mt-4">
+                <div className="mt-5">
                   <div className="flex items-baseline justify-between text-xs">
                     <span className="text-base-500">Coverage score</span>
                     <span className="font-mono text-base-200">
@@ -81,7 +81,7 @@ export default function TargetsPage() {
                   />
                 </div>
 
-                <div className="mt-4 flex items-center justify-between border-t border-base-800 pt-3 text-xs text-base-600">
+                <div className="mt-5 flex items-center justify-between border-t border-base-850 pt-3.5 text-xs text-base-600">
                   <span>
                     {runs.length} run{runs.length === 1 ? "" : "s"} ·{" "}
                     {formatRelative(t.lastRunAt)}
@@ -95,7 +95,7 @@ export default function TargetsPage() {
                     </Link>
                   ) : null}
                 </div>
-              </Card>
+              </Section>
             );
           })}
         </div>

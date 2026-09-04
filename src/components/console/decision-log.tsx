@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Badge, Card, CardHeader, Empty } from "@/components/ui/primitives";
+import { Badge, Section, SectionHeader, Empty } from "@/components/ui/primitives";
 import { cn, formatClock } from "@/lib/format";
 import { STAGE_META, type Evidence, type OrchestratorEvent } from "@/lib/types";
 
@@ -34,8 +34,8 @@ export function DecisionLog({ decisions }: { decisions: DecisionEvent[] }) {
   }, [count]);
 
   return (
-    <Card className="flex min-h-0 flex-col">
-      <CardHeader
+    <Section flush className="flex min-h-0 flex-col">
+      <SectionHeader
         title={
           <span className="flex items-center gap-2">
             Decision log
@@ -54,7 +54,7 @@ export function DecisionLog({ decisions }: { decisions: DecisionEvent[] }) {
             {decisions.map((d) => (
               <li
                 key={d.seq}
-                className="animate-stream-in px-4 py-3.5"
+                className="animate-stream-in px-6 py-3.5"
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone="ember" mono>
@@ -78,7 +78,7 @@ export function DecisionLog({ decisions }: { decisions: DecisionEvent[] }) {
                     {d.evidence.map((e, i) => (
                       <li
                         key={i}
-                        className="flex items-start gap-2 rounded-md border border-base-850 bg-base-950/50 px-2 py-1.5"
+                        className="flex items-start gap-2 rounded-md bg-base-900 px-2.5 py-1.5"
                       >
                         <span
                           aria-hidden
@@ -106,7 +106,7 @@ export function DecisionLog({ decisions }: { decisions: DecisionEvent[] }) {
         )}
         <div ref={endRef} />
       </div>
-    </Card>
+    </Section>
   );
 }
 

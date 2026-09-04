@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { Badge, Card, Dot, type Tone } from "@/components/ui/primitives";
+import { Badge, Section, Dot, type Tone } from "@/components/ui/primitives";
 import { RUN_HISTORY, targetName } from "@/lib/mock-fleet";
 import { formatDuration, formatRelative, formatUsd, hostOf } from "@/lib/format";
 import type { RunStatus } from "@/lib/types";
@@ -26,16 +26,16 @@ export default function RunsPage() {
         actions={
           <Link
             href="/new"
-            className="rounded-lg bg-ember-500 px-3.5 py-2 text-[13px] font-semibold text-base-950 transition hover:bg-ember-400"
+            className="rounded-md bg-ember-500 px-3.5 py-2 text-[13px] font-semibold text-base-950 transition hover:bg-ember-400"
           >
             New run
           </Link>
         }
       />
       <PageBody>
-        <Card className="overflow-hidden">
+        <Section>
           {/* Column heads — mirrored by the row grid below. */}
-          <div className="hidden grid-cols-[1.6fr_repeat(5,minmax(0,0.62fr))_auto] gap-3 border-b border-base-800 px-4 py-2.5 text-[10px] font-medium uppercase tracking-[0.12em] text-base-600 lg:grid">
+          <div className="hidden grid-cols-[1.6fr_repeat(5,minmax(0,0.62fr))_auto] gap-3 border-b border-base-850 px-6 py-3 text-[10px] font-medium uppercase tracking-[0.12em] text-base-600 lg:grid">
             <span>Target</span>
             <span className="text-right">Pass / fail</span>
             <span className="text-right">Healed</span>
@@ -45,12 +45,12 @@ export default function RunsPage() {
             <span className="w-12 text-right">Score</span>
           </div>
 
-          <div className="divide-y divide-base-800">
+          <div className="divide-y divide-base-850">
             {runs.map((r) => (
               <Link
                 key={r.id}
                 href={`/runs/${r.id}`}
-                className="grid grid-cols-1 gap-3 px-4 py-3 transition hover:bg-base-850/50 lg:grid-cols-[1.6fr_repeat(5,minmax(0,0.62fr))_auto] lg:items-center"
+                className="grid grid-cols-1 gap-3 px-6 py-3.5 transition hover:bg-base-900/60 lg:grid-cols-[1.6fr_repeat(5,minmax(0,0.62fr))_auto] lg:items-center"
               >
                 <div className="flex min-w-0 items-start gap-2.5">
                   <span className="mt-1.5">
@@ -107,7 +107,7 @@ export default function RunsPage() {
               </Link>
             ))}
           </div>
-        </Card>
+        </Section>
       </PageBody>
     </>
   );

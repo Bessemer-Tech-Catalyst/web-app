@@ -5,7 +5,7 @@ import { STAGES, STAGE_META, type RunState } from "@/lib/types";
 export function StagePipeline({ state }: { state: RunState }) {
   return (
     <div className="overflow-x-auto">
-      <ol className="flex min-w-max items-stretch gap-0 px-1 py-3">
+      <ol className="flex min-w-max items-stretch">
         {STAGES.map((stage, i) => {
           const s = state.stages[stage];
           const meta = STAGE_META[stage];
@@ -19,19 +19,16 @@ export function StagePipeline({ state }: { state: RunState }) {
                 <div
                   aria-hidden
                   className={cn(
-                    "mt-4 h-px w-6 shrink-0 self-start transition-colors duration-500",
-                    done || active ? "bg-ember-600/50" : "bg-base-800",
+                    "w-px shrink-0 transition-colors duration-500",
+                    done || active ? "bg-ember-600/40" : "bg-base-850",
                   )}
                 />
               )}
               <li
                 className={cn(
-                  "relative min-w-[9.5rem] max-w-[11rem] rounded-lg border px-3 py-2.5 transition-all duration-300",
-                  active &&
-                    "border-ember-500/60 bg-ember-600/10 animate-pulse-ring",
-                  done && "border-base-800 bg-base-900/70",
-                  failed && "border-danger-500/50 bg-danger-500/8",
-                  !active && !done && !failed && "border-base-850 bg-base-900/30",
+                  "relative min-w-[10rem] max-w-[12rem] flex-1 px-4 py-3 transition-colors duration-300",
+                  active && "bg-ember-600/10",
+                  failed && "bg-danger-500/8",
                 )}
                 aria-current={active ? "step" : undefined}
               >
@@ -51,19 +48,19 @@ export function StagePipeline({ state }: { state: RunState }) {
                 </div>
                 <p
                   className={cn(
-                    "mt-1 line-clamp-2 text-[11px] leading-snug",
+                    "mt-1.5 line-clamp-2 text-[11px] leading-snug",
                     active ? "text-base-400" : "text-base-600",
                   )}
                 >
                   {meta.blurb}
                 </p>
                 {s.durationMs ? (
-                  <span className="mt-1.5 block font-mono text-[10px] text-base-600">
+                  <span className="mt-2 block font-mono text-[10px] text-base-600">
                     {formatDuration(s.durationMs)}
                   </span>
                 ) : null}
                 {active ? (
-                  <span className="absolute inset-x-0 bottom-0 h-px overflow-hidden rounded-b-lg">
+                  <span className="absolute inset-x-0 bottom-0 h-px overflow-hidden">
                     <span className="block h-full w-1/3 animate-scan bg-ember-400" />
                   </span>
                 ) : null}
