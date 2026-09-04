@@ -14,22 +14,26 @@
  *
  * Each agent gets its own browser process, so a session has to survive past the agent
  * that created it: Recon signs in, and the Planner and the Generator both need to be
- * that same signed-in user. They share one on-disk profile per run (`profileDir`), which
- * is what carries the cookies across. `--storage-state` cannot do this job — it only
- * *loads* state, and nothing here can write it.
+ * that same signed-in user. `--storage-state` only *loads* a session, so something has to
+ * write one: `browser_storage_state`, which the orchestrator calls itself at the end of
+ * Recon (see `./storage-state.ts`).
  *
- * That is why `--isolated` is not used. It keeps the profile in memory, which is exactly
- * the property we cannot have: the profile dies with the process and the next agent
- * arrives logged out. Isolation *between runs* is preserved anyway, because the profile
- * lives inside the run's own workspace. The cost is that a run's cookies are now on disk
- * for the life of that workspace rather than never — acceptable, since the workspace is
- * already where the traces, screenshots and credentials-bearing artifacts live, and it
- * is gitignored.
+ * **The profile alone turned out not to be enough.** Chrome flushes its cookie store to
+ * disk lazily, so "Recon's cookie is in the profile by the time the Generator opens it"
+ * is a race with a background timer rather than a guarantee. It won on `run_1ad8602e`
+ * and lost on `run_0c3d41d1`: Recon reported an authenticated crawl of four routes, and
+ * the Generator quarantined all three scenarios because it could not sign in. On a target
+ * that keeps its session in localStorage the profile never carried it at all.
  *
- * The profile is a lock, not just a directory: two browsers cannot hold it at once. The
- * agents run strictly in sequence and `withPlaywright` awaits `close()` before returning,
- * so that holds today — but a future stage that runs two MCP agents concurrently needs a
- * profile per agent plus an explicit state hand-off, not this.
+ * So the hand-off is now explicit. Recon dumps the live session to `results/state.json`
+ * while its own browser is still open, and every agent after it runs `--isolated
+ * --storage-state <that file>` — an in-memory profile seeded from a file we wrote at a
+ * moment we chose. The shared `--user-data-dir` remains the path for Recon itself and the
+ * fallback for a run with no session on file, so an anonymous target is unaffected.
+ *
+ * That also answers the note this comment used to end on: two MCP agents can now run
+ * concurrently, because each gets its own in-memory profile seeded from the same state
+ * file rather than contending for one directory's lock.
  */
 
 import { MCPServerStdio } from "@openai/agents";
@@ -37,6 +41,7 @@ import { WATCH_SETTLE_MS, WATCH_VIEWPORT, headed } from "../browser-mode";
 import { profileDir, runPath } from "../paths";
 import { writeArtifact } from "../workspace";
 import { WATCH_OVERLAY } from "./watch-overlay";
+import { STATE_FILE, carriesSession, readStorageState } from "./storage-state";
 import type { RunInput } from "@/lib/types";
 
 /** Read-write browsing: enough to log in and drive a form, nothing that executes code. */
@@ -156,7 +161,10 @@ const TOOLS: Record<McpAgent, string[]> = {
  * the point: reading the session out is our job, and writing one back in is nobody's.
  */
 const CAPS: Record<McpAgent, string> = {
-  recon: "vision",
+  // Recon gets `storage` because it is the agent that performs the login, and the dump
+  // has to happen while *its* browser is still open — that is the whole point of the
+  // change described in this file's header.
+  recon: "vision,storage",
   planner: "vision",
   generator: "testing,storage",
   classifier: "vision",
@@ -175,6 +183,12 @@ export function createPlaywrightServer(
   agent: McpAgent,
   /** Path to the watch overlay, when this is a headed run someone is watching. */
   overlayPath?: string,
+  /**
+   * Absolute path to a storage-state file to seed this browser from. When given, the
+   * browser is isolated and starts from that file instead of the shared profile — see
+   * the header. Absent for Recon, and for any run that has not established a session.
+   */
+  sessionFile?: string,
 ): MCPServerStdio {
   const watched = headed();
   const options: ConstructorParameters<typeof MCPServerStdio>[0] = {
@@ -199,12 +213,13 @@ export function createPlaywrightServer(
             ...(overlayPath ? ["--init-script", overlayPath] : []),
           ]
         : []),
-      // The shared per-run profile. This is the auth hand-off: whatever session Recon
-      // establishes is on disk here, so the Planner and Generator open a browser that is
-      // already signed in rather than one that has to log in again — or, as before,
-      // silently did not.
-      "--user-data-dir",
-      profileDir(runId),
+      // The auth hand-off. A session on file wins: it is what Recon dumped out of the
+      // browser that actually performed the login, so it does not depend on Chrome having
+      // got round to writing its cookie store. Without one — Recon itself, or an
+      // anonymous target — the shared on-disk profile is still the mechanism.
+      ...(sessionFile
+        ? ["--isolated", "--storage-state", sessionFile]
+        : ["--user-data-dir", profileDir(runId)]),
       "--block-service-workers",
       // Traces, screenshots and videos land in the run workspace like every other
       // artifact, so the report can cite them by workspace-relative path.
@@ -232,6 +247,11 @@ export async function withPlaywright<T>(
   agent: McpAgent,
   body: (server: MCPServerStdio) => Promise<T>,
 ): Promise<T> {
+  // Recon is the agent that establishes the session, so it is the one agent that cannot
+  // be seeded from it. Everyone downstream is, whenever there is something to seed from.
+  const state = agent === "recon" ? null : await readStorageState(runId);
+  const sessionFile = state && carriesSession(state) ? runPath(runId, STATE_FILE) : undefined;
+
   // Written into the run workspace rather than shipped as a file on disk, so it cannot
   // go missing from a production build and so the run is self-describing afterwards.
   let overlayPath: string | undefined;
@@ -240,7 +260,7 @@ export async function withPlaywright<T>(
     overlayPath = runPath(runId, "watch-overlay.js");
   }
 
-  const server = createPlaywrightServer(runId, input, agent, overlayPath);
+  const server = createPlaywrightServer(runId, input, agent, overlayPath, sessionFile);
   await server.connect();
   try {
     return await body(server);

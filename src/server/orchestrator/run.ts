@@ -387,7 +387,12 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
             before: proposal.before,
             after: proposal.after,
             assertionsIntact: guard.intact,
-            outcome: guard.intact ? "healed" : "rejected",
+            // Provisional. A patch that clears the guard has not healed anything yet —
+            // only the re-run can say that, and it is set below. This used to be left at
+            // "healed" for every accepted patch, so the report counted a patch that was
+            // *allowed* as a test that *passed*, which is the one thing the report exists
+            // not to do.
+            outcome: guard.intact ? "escalated" : "rejected",
           };
           heals.push(record);
           emit({ type: "heal.attempted", attempt: record });
@@ -420,6 +425,7 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
           results.set(rerun.testId, rerun);
           emit({ type: "test.result", result: rerun });
           healed = rerun.status === "healed" || rerun.status === "passed";
+          record.outcome = healed ? "healed" : "escalated";
           if (healed) break;
         }
 

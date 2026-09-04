@@ -47,10 +47,11 @@ export default function ControlPage() {
         <Toggle
           on={flags?.drift ?? false}
           onChange={() => toggle("drift")}
-          title="Rename the add button"
+          title="Rename “Basket” to “Bag”"
           detail={
-            "“Add to cart” becomes “Add to bag”. The application is completely healthy; a " +
-            "test written before the flip cannot find the control. Expect SCRIPT_DRIFT and a heal."
+            "The nav link and the add button both change wording. The application is completely " +
+            "healthy; a test written before the flip cannot find what it was told to click. " +
+            "Expect SCRIPT_DRIFT and a heal."
           }
         />
         <Toggle

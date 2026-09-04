@@ -153,10 +153,36 @@ on command, which is what makes the classifier demonstrable rather than merely d
 
 | Switch | What it does | The verdict it should produce |
 |---|---|---|
-| **Rename the add button** | "Add to cart" → "Add to bag". The app is perfectly healthy. | `SCRIPT_DRIFT` → the Healer re-proves the control and patches the test |
+| **Rename "Basket" to "Bag"** | The nav link and the add button both change wording. The app is perfectly healthy. | `SCRIPT_DRIFT` → the Healer re-proves the control and patches the test |
 | **Break order history** | `GET /api/shoplite/orders` returns 500. The order still saves. | `APP_DEFECT` → **bug filed, Healer withheld, test stays red** |
 
-Flip one *between* two stages of a live run and watch what the orchestrator decides.
+Flip one *between* two stages of a live run and watch what the orchestrator decides. That is the
+demo, and it is the only honest way to test a classifier: generate the suite against a healthy app,
+break the app, then run it. In `run_8b37144b` that produced, with no human in between:
+
+```
+VERDICT orders-view-authenticated-history -> APP_DEFECT 0.94
+  The authenticated Orders page cannot load order history: its dependent API returns
+  HTTP 500, and the application logs an ORDER_HISTORY_UNAVAILABLE error caused by an
+  exhausted connection pool. The UI renders an explicit failure alert instead of the
+  expected order table, confirming an application-side failure rather than a locator
+  mismatch.
+
+DECISION Withhold the Healer from 1 of 3 failures
+BUG      Authenticated order history fails with exhausted connection pool
+
+VERDICT products-add-item-to-basket -> SCRIPT_DRIFT 0.61
+  ...the product controls are labeled "Add to bag", not "Add to basket". This is an
+  equivalent control under different wording.
+HEAL     -  await page.getByRole("link", { name: "Basket" }).click();
+         +  await page.getByRole("link", { name: "Bag" }).click();
+         assertionsIntact: true · 1 new locator, resolved live · re-run green
+
+DECISION Reject the Healer's patch for signin-invalid-credentials — it weakened an assertion
+```
+
+The last line was not staged. The Healer's own summary of that patch said *"without changing any
+assertions"*; the syntactic diff disagreed, and the diff wins.
 
 ---
 
@@ -168,7 +194,7 @@ This repo distinguishes "the code exists" from "a real run produced it", and say
 |---|---|
 | Recon, Planner, Coverage Critic | ✅ real, **verified by live runs** — signed in unaided, crawled 11 authenticated routes, scored 62 → replanned → 82 |
 | Generator, Executor | ✅ real, **verified by a green live run** — 2 tests at 14/14 and 20/20 proven locators, `expected: 2, unexpected: 0`, $0.317 |
-| Classifier, Healer, rerun, ShopLite | ⚠️ **built and unit-tested; no orchestrated run has been through them yet** |
+| Classifier, Healer, rerun, ShopLite | ✅ real, **verified by a live run** — `run_8b37144b` classified a 500 as `APP_DEFECT` at 0.94 and left it red, healed a renamed control, and had a patch rejected by the assertion guard. $0.161 |
 | Risk ledger, PRD trace | deterministic stand-ins (Phase 6) |
 
 The open design question, stated rather than hidden: the storage-state hand-off carries the

@@ -10,11 +10,16 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE } from "./shop";
+import { readFlags } from "./shop-state";
 
 export const metadata = { title: "ShopLite" };
 
 export default async function ShopLiteLayout({ children }: { children: React.ReactNode }) {
   const email = (await cookies()).get(SESSION_COOKIE)?.value;
+  // The `drift` switch is a copy change, and a copy change is not confined to one
+  // button: it renames the concept everywhere it appears. The nav is where it bites
+  // hardest, because a generated test reaches most pages through a named link.
+  const { drift } = await readFlags();
 
   return (
     <div className="sl">
@@ -25,7 +30,7 @@ export default async function ShopLiteLayout({ children }: { children: React.Rea
         </Link>
         <nav className="sl-nav">
           <Link href="/shoplite/products">Products</Link>
-          <Link href="/shoplite/basket">Basket</Link>
+          <Link href="/shoplite/basket">{drift ? "Bag" : "Basket"}</Link>
           <Link href="/shoplite/orders">Orders</Link>
         </nav>
         <span className="sl-who">{email ? email : "Signed out"}</span>
