@@ -84,10 +84,18 @@ export async function recon(ctx: AgentContext): Promise<ReconResult> {
     `Recon map — ${result.routes.length} routes, ${result.evidence.length} observations`,
   );
 
-  // §4: Recon writes the session bootstrap so the Planner and the generated suite both
-  // run as the user Recon signed in as.
-  await writeArtifact(ctx.runId, "tests/seed.spec.ts", SEED_SPEC);
-  ctx.artifact("test", "tests/seed.spec.ts", "Session bootstrap");
+  // Recon does not write a seed spec. It used to, and the spec it wrote was a lie: it
+  // navigated to "/" and saved storage state without ever logging in, nothing executed
+  // it, and the `results/state.json` the rest of the code claimed to read never existed.
+  //
+  // The Planner and Generator get Recon's session from the shared browser profile
+  // instead (see `profileDir`), which needs no file and no extra execution step.
+  //
+  // A real seed spec is still owed to Phase 4: the *generated suite* runs under
+  // `playwright test`, which cannot use a Chrome user-data-dir and needs a
+  // `storageState` file. Writing that spec means reproducing the login as Playwright
+  // code, which is the Generator's job — it is the only agent that proves locators
+  // against the live page — so it belongs there, not here.
 
   return result;
 }
@@ -113,12 +121,3 @@ function buildInput(ctx: AgentContext): string {
 function dedupe(routes: string[]): string[] {
   return [...new Set(routes.map((r) => r.trim()).filter(Boolean))];
 }
-
-const SEED_SPEC = `import { test as setup } from "@playwright/test";
-
-/** Session bootstrap, per Playwright's own agent file contract. */
-setup("authenticate", async ({ page }) => {
-  await page.goto("/");
-  await page.context().storageState({ path: "results/state.json" });
-});
-`;
