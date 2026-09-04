@@ -8,34 +8,32 @@ import { DecisionLog } from "@/components/console/decision-log";
 import { StagePipeline } from "@/components/console/stage-pipeline";
 import { TestBoard } from "@/components/console/test-board";
 import { Badge, Section, SectionHeader, Dot, Empty } from "@/components/ui/primitives";
-import { useRunStream, type Speed } from "@/hooks/use-run-stream";
+import { useRunStream } from "@/hooks/use-run-stream";
 import { cn, formatDuration, formatTokens, formatUsd, hostOf } from "@/lib/format";
-import { loadDraft } from "@/lib/run-draft";
-import { DEFAULT_RUN_OPTIONS, STAGE_META, type RunInput } from "@/lib/types";
-import { MOCK_TARGET_URL } from "@/lib/mock-run";
+import { cancelRun } from "@/lib/run-client";
+import { STAGE_META } from "@/lib/types";
 
 export function RunConsole({ runId }: { runId: string }) {
-  const [input, setInput] = useState<RunInput | null>(null);
-  const [elapsed, setElapsed] = useState(0);
   const [tab, setTab] = useState<"suite" | "activity" | "artifacts">("suite");
+  const [cancelling, setCancelling] = useState(false);
 
-  useEffect(() => {
-    setInput(
-      loadDraft(runId) ?? {
-        url: MOCK_TARGET_URL,
-        intent: "focus on checkout and authentication flows",
-        options: DEFAULT_RUN_OPTIONS,
-      },
-    );
-  }, [runId]);
+  const { state, status, done } = useRunStream(runId);
+  const input = state.input;
 
-  const { state, speed, setSpeed, done, skipToEnd } = useRunStream(runId, input);
-
+  // Elapsed is measured from the run's own first event, not from when this tab
+  // opened, so a reload mid-run shows the true clock.
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (done) return;
-    const t = setInterval(() => setElapsed((e) => e + 100), 100);
+    const t = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(t);
   }, [done]);
+
+  const elapsed = state.report
+    ? state.report.durationMs
+    : state.startedAt
+      ? Math.max(0, now - Date.parse(state.startedAt))
+      : 0;
 
   const budgetPct = useMemo(
     () =>
@@ -43,9 +41,19 @@ export function RunConsole({ runId }: { runId: string }) {
     [state.costUsd, input],
   );
 
-  if (!input) return null;
+  if (!input) {
+    return (
+      <main className="flex h-full items-center justify-center px-6">
+        <p className="text-sm text-base-500">
+          {status === "error"
+            ? "Lost the connection to this run — retrying…"
+            : "Connecting to the run stream…"}
+        </p>
+      </main>
+    );
+  }
 
-  const running = state.status === "running";
+  const running = state.status === "running" && !done;
 
   return (
     <main className="flex h-full flex-col overflow-hidden">
@@ -80,31 +88,29 @@ export function RunConsole({ runId }: { runId: string }) {
               value={`${formatTokens(state.tokensIn)}/${formatTokens(state.tokensOut)}`}
             />
 
-            <div className="flex items-center gap-0.5 rounded-md border border-base-800 bg-base-900 p-0.5">
-              {([1, 2, 4] as Speed[]).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setSpeed(s)}
-                  aria-pressed={speed === s}
-                  className={cn(
-                    "rounded px-2 py-1 font-mono text-[11px] transition",
-                    speed === s
-                      ? "bg-base-800 text-base-100"
-                      : "text-base-500 hover:text-base-300",
-                  )}
-                >
-                  {s}×
-                </button>
-              ))}
+            <span
+              className="flex items-center gap-1.5 rounded-md border border-base-800 bg-base-900 px-2.5 py-1.5 text-[11px] text-base-400"
+              title={`Event stream: ${status}`}
+            >
+              <Dot
+                tone={status === "live" ? "ok" : status === "ended" ? "neutral" : "warn"}
+                pulse={status === "live" && running}
+              />
+              {status === "live" ? "streaming" : status === "ended" ? "stream closed" : "reconnecting"}
+            </span>
+
+            {running ? (
               <button
-                onClick={skipToEnd}
-                disabled={done}
-                className="rounded px-2 py-1 font-mono text-[11px] text-base-500 transition hover:text-base-300 disabled:opacity-40"
-                title="Fast-forward to the end"
+                onClick={() => {
+                  setCancelling(true);
+                  void cancelRun(runId);
+                }}
+                disabled={cancelling}
+                className="rounded-md border border-base-800 px-2.5 py-1.5 text-[11px] text-base-400 transition hover:border-danger-500/60 hover:text-danger-400 disabled:opacity-50"
               >
-                ⏭
+                {cancelling ? "Cancelling…" : "Cancel run"}
               </button>
-            </div>
+            ) : null}
 
             {state.report ? (
               <Link
@@ -191,6 +197,14 @@ export function RunConsole({ runId }: { runId: string }) {
               {state.report.failed} failed · {state.report.bugs.length} bugs filed ·
               coverage {state.report.coverageScore}/100
             </span>
+          </>
+        ) : state.errors.length ? (
+          <>
+            <Dot tone="danger" />
+            <span className="text-base-300">
+              {state.status === "cancelled" ? "Run cancelled" : "Run failed"}
+            </span>
+            <span className="truncate">{state.errors.at(-1)?.message}</span>
           </>
         ) : (
           <>

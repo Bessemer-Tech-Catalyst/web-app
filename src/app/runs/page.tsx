@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
 import { Badge, Section, Dot, type Tone } from "@/components/ui/primitives";
-import { RUN_HISTORY, targetName } from "@/lib/mock-fleet";
+import { RUN_HISTORY, targetName, type RunHistoryEntry } from "@/lib/mock-fleet";
+import { listRuns } from "@/server/run-store";
 import { formatDuration, formatRelative, formatUsd, hostOf } from "@/lib/format";
 import type { RunStatus } from "@/lib/types";
 
 export const metadata = { title: "Past runs — The Odyssey" };
+
+// Real runs are read from the run index on every request; nothing here is cached.
+export const dynamic = "force-dynamic";
 
 const STATUS_TONE: Record<RunStatus, Tone> = {
   queued: "neutral",
@@ -15,8 +19,18 @@ const STATUS_TONE: Record<RunStatus, Tone> = {
   cancelled: "neutral",
 };
 
-export default function RunsPage() {
-  const runs = [...RUN_HISTORY].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+export default async function RunsPage() {
+  // Runs this instance has actually driven, ahead of the seeded fleet history the
+  // other pages still read from.
+  const real: RunHistoryEntry[] = (await listRuns()).map((r) => ({
+    ...r,
+    targetId: "",
+    trigger: "manual" as const,
+  }));
+
+  const runs = [...real, ...RUN_HISTORY].sort((a, b) =>
+    b.startedAt.localeCompare(a.startedAt),
+  );
 
   return (
     <>
@@ -59,7 +73,7 @@ export default function RunsPage() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-[13px] text-base-200">
-                        {targetName(r.targetId)}
+                        {r.targetId ? targetName(r.targetId) : hostOf(r.url)}
                       </span>
                       <Badge tone={r.trigger === "schedule" ? "info" : "neutral"}>
                         {r.trigger}

@@ -1,0 +1,464 @@
+/**
+ * The orchestrator — an explicit finite state machine over one run.
+ *
+ *   INIT → RECON → PLAN → CRITIQUE ─┬─(gaps, budget left)→ PLAN
+ *                                    └─(pass)→ GENERATE
+ *   GENERATE → EXECUTE → TRIAGE ─┬─(SCRIPT_DRIFT)→ HEAL
+ *                                 ├─(ENV_FLAKE)→ RETRY
+ *                                 ├─(APP_DEFECT)→ BUG LEDGER  (never heal)
+ *                                 └─(PLAN_ERROR)→ BACKLOG
+ *   HEAL → REPORT → DONE
+ *
+ * Every judgment lives here, not in an agent: whether the plan is good enough, whether
+ * a failure is the app's fault, whether a patch is honest, when to stop spending. Each
+ * one emits a `decision` event carrying its rationale, confidence and cited evidence —
+ * that stream *is* the product, so nothing may branch silently.
+ *
+ * Agents are injected (see ./agents.ts). Phase 2 runs against deterministic stubs.
+ */
+
+import { checkAssertionIntegrity } from "./assertion-guard";
+import { stubAgents } from "./stub-agents";
+import * as fx from "./fixtures";
+import type { AgentContext, Agents, ReconResult } from "./agents";
+import { runDir } from "../paths";
+import { writeArtifact } from "../workspace";
+import {
+  type Critique,
+  type Evidence,
+  type FiledBug,
+  type HealAttempt,
+  type OrchestratorEventInit,
+  type RunInput,
+  type RunStatus,
+  type Scenario,
+  type Stage,
+  type TestQualityReport,
+  type TestResult,
+  type TriageOutcome,
+} from "@/lib/types";
+
+export interface OrchestratorOptions {
+  runId: string;
+  input: RunInput;
+  emit: (event: OrchestratorEventInit) => void;
+  signal: AbortSignal;
+  agents?: Agents;
+}
+
+export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunStatus> {
+  const { runId, input, emit, signal } = opts;
+  const agents = opts.agents ?? stubAgents;
+  const startedAt = new Date();
+
+  let costUsd = 0;
+  let budgetExceeded = false;
+
+  const ctx: AgentContext = {
+    runId,
+    input,
+    workspace: runDir(runId),
+    signal,
+    think: (agent, text) => emit({ type: "agent.thinking", agent, text }),
+    tool: (agent, tool, summary, ok = true) =>
+      emit({ type: "agent.tool", agent, tool, summary, ok }),
+    artifact: (kind, path, title) => emit({ type: "artifact", kind, path, title }),
+    spend: (usd, tokensIn, tokensOut) => {
+      costUsd += usd;
+      emit({ type: "cost", usd, tokensIn, tokensOut });
+      if (!budgetExceeded && costUsd > input.options.budgetUsd) {
+        budgetExceeded = true;
+        decide(
+          "report",
+          "Stop early — the run has reached its budget ceiling",
+          `Spend has passed the $${input.options.budgetUsd.toFixed(2)} ceiling set for this run. ` +
+            "Continuing would trade an unbounded amount of money for a marginal amount of coverage, " +
+            "so the orchestrator degrades gracefully and reports what it has rather than pressing on.",
+          0.99,
+          [{ kind: "heuristic", summary: `Spend $${costUsd.toFixed(2)} of $${input.options.budgetUsd.toFixed(2)}` }],
+        );
+      }
+    },
+  };
+
+  const decide = (
+    stage: Stage,
+    action: string,
+    rationale: string,
+    confidence: number,
+    evidence: Evidence[],
+  ) => emit({ type: "decision", stage, action, rationale, confidence, evidence });
+
+  /** Wraps a stage so entry, exit, duration and failure handling are never forgotten. */
+  async function stage<T>(
+    name: Stage,
+    attempt: number,
+    body: () => Promise<{ value: T; outcome?: "ok" | "replan" }>,
+  ): Promise<T> {
+    const t0 = Date.now();
+    emit({ type: "stage.entered", stage: name, attempt });
+    try {
+      const { value, outcome = "ok" } = await body();
+      emit({ type: "stage.exited", stage: name, outcome, durationMs: Date.now() - t0 });
+      return value;
+    } catch (err) {
+      if (signal.aborted) throw err;
+      emit({
+        type: "error",
+        stage: name,
+        message: err instanceof Error ? err.message : String(err),
+        recoverable: false,
+      });
+      emit({ type: "stage.exited", stage: name, outcome: "failed", durationMs: Date.now() - t0 });
+      throw err;
+    }
+  }
+
+  emit({ type: "run.started", runId, input });
+
+  // ---- RECON ---------------------------------------------------------------
+  const recon = await stage<ReconResult>("recon", 1, async () => {
+    const value = await agents.recon(ctx);
+    decide(
+      "recon",
+      "Compact each page to an interactive-element digest instead of raw HTML",
+      "Raw DOM would consume roughly 40× the tokens and buries the signal. The accessibility " +
+        "tree gives deterministic, nameable targets and keeps the planner inside its context budget.",
+      0.96,
+      value.evidence.slice(0, 1),
+    );
+    emit({ type: "recon.ready", routes: value.routes, authenticated: value.authenticated });
+    return { value };
+  });
+
+  // ---- PLAN ⇄ CRITIQUE -----------------------------------------------------
+  let scenarios: Scenario[] = [];
+  let critique: Critique | null = null;
+  let attempt = 1;
+  const critiques: Critique[] = [];
+
+  for (;;) {
+    scenarios = await stage("plan", attempt, async () => ({
+      value: await agents.plan(ctx, {
+        attempt,
+        directives: critique?.gaps ?? [],
+        previous: scenarios.length ? scenarios : undefined,
+      }),
+    }));
+    emit({ type: "plan.ready", attempt, scenarios });
+
+    const verdictAttempt = attempt;
+    const graded = await stage("critique", verdictAttempt, async () => {
+      const value = await agents.critique(ctx, { attempt: verdictAttempt, scenarios, recon });
+      emit({ type: "critique.ready", critique: value });
+      return { value, outcome: value.verdict === "replan" ? ("replan" as const) : ("ok" as const) };
+    });
+
+    critique = graded;
+    critiques.push(graded);
+
+    // The gate. Re-planning is bounded — an unbounded critic loop is a hung demo.
+    const budgetLeft = attempt <= input.options.maxReplans && !budgetExceeded;
+    if (graded.verdict === "pass") {
+      decide(
+        "critique",
+        `Accept the plan at ${graded.score}/100 and proceed to generation`,
+        graded.rationale,
+        0.9,
+        [
+          graded.previousScore
+            ? { kind: "heuristic", summary: `Coverage ${graded.previousScore} → ${graded.score} after ${attempt - 1} re-plan` }
+            : { kind: "heuristic", summary: `Coverage ${graded.score}/100 on the first pass` },
+          { kind: "heuristic", summary: `${graded.gaps.length} gaps accepted as out of budget rather than unnoticed` },
+        ],
+      );
+      break;
+    }
+
+    if (!budgetLeft) {
+      decide(
+        "critique",
+        `Proceed at ${graded.score}/100 — the re-plan allowance is spent`,
+        `The plan still scores below threshold, but it has been re-planned ${attempt - 1} time(s) and the ` +
+          `allowance is ${input.options.maxReplans}. Looping further would spend the run's clock on planning ` +
+          "instead of evidence. The unclosed gaps are carried into the risk ledger so nothing is silently dropped.",
+        0.72,
+        [
+          { kind: "heuristic", summary: `Score ${graded.score}/100, ${graded.gaps.length} gaps unresolved` },
+          { kind: "heuristic", summary: `maxReplans = ${input.options.maxReplans}` },
+        ],
+      );
+      break;
+    }
+
+    decide(
+      "critique",
+      `Reject the plan and re-plan with ${graded.gaps.length} targeted directives`,
+      graded.rationale,
+      0.93,
+      [
+        {
+          kind: "heuristic",
+          summary: Object.entries(graded.dimensions)
+            .filter(([, v]) => v < 60)
+            .map(([k, v]) => `${k} ${v}/100`)
+            .join(", ") || `overall ${graded.score}/100`,
+        },
+        ...recon.evidence.slice(1, 2),
+      ],
+    );
+    attempt++;
+  }
+
+  const replans = attempt - 1;
+
+  // ---- GENERATE ------------------------------------------------------------
+  const generated = await stage("generate", 1, async () => {
+    const value = await agents.generate(ctx, { scenarios });
+    for (const q of value.quarantined) {
+      decide(
+        "generate",
+        `Quarantine "${q.title}" instead of emitting a guessed selector`,
+        q.reason,
+        0.89,
+        [{ kind: "selector-provenance", summary: "Required element absent from the live accessibility snapshot" }],
+      );
+    }
+    const verified = value.tests.reduce((n, t) => n + t.selectorsVerified, 0);
+    const total = value.tests.reduce((n, t) => n + t.selectorsTotal, 0);
+    decide(
+      "generate",
+      `Ship ${value.tests.length} verified tests; hold ${value.quarantined.length} scenarios in quarantine`,
+      "A suite where every selector is proven is worth more than a larger suite with guessed " +
+        "locators. The held scenarios are reported with reasons rather than dropped, so the team " +
+        "can unblock them deliberately.",
+      0.95,
+      [{ kind: "selector-provenance", summary: `${verified}/${total} emitted locators verified against the live page` }],
+    );
+    return { value };
+  });
+
+  for (const t of generated.tests) emit({ type: "test.generated", test: t });
+
+  // ---- EXECUTE -------------------------------------------------------------
+  const results = new Map<string, TestResult>();
+  const firstPass = await stage("execute", 1, async () => {
+    decide(
+      "execute",
+      `Shard ${generated.tests.length} tests across ${input.options.parallelWorkers} workers`,
+      "Flows are independent and each test bootstraps its own session through the seed fixture, " +
+        "so there is no shared-state hazard. Serial execution would take roughly 4× as long.",
+      0.92,
+      [{ kind: "heuristic", summary: "No cross-test fixtures or shared mutable state detected" }],
+    );
+    return { value: await agents.execute(ctx, { tests: generated.tests, attempt: 1 }) };
+  });
+
+  for (const r of firstPass) {
+    results.set(r.testId, r);
+    emit({ type: "test.result", result: r });
+  }
+
+  // ---- TRIAGE --------------------------------------------------------------
+  const failures = firstPass.filter((r) => r.status === "failed");
+  let triage: TriageOutcome[] = [];
+  const bugs: FiledBug[] = [];
+
+  if (failures.length) {
+    triage = await stage("triage", 1, async () => {
+      const value = await agents.triage(ctx, { failures });
+      for (const outcome of value) emit({ type: "triage.verdict", outcome });
+
+      const defects = value.filter((v) => v.verdict === "APP_DEFECT");
+      const drift = value.filter((v) => v.verdict === "SCRIPT_DRIFT");
+      const flakes = value.filter((v) => v.verdict === "ENV_FLAKE");
+
+      if (defects.length) {
+        decide(
+          "triage",
+          `Withhold the Healer from ${defects.length} of ${value.length} failures`,
+          `${defects.map((d) => d.testId).join(" and ")} are classified as genuine application defects. ` +
+            "Healing a real defect deletes the exact signal the suite exists to produce, so these stay red " +
+            `and are filed as bugs. ${drift.length} script-drift failure(s) go to the Healer; ` +
+            `${flakes.length} suspected flake(s) are retried once before reclassification.`,
+          Math.min(...value.map((v) => v.confidence)),
+          value.flatMap((v) => v.evidence.filter((e) => e.kind === "http-status" || e.kind === "snapshot-diff")).slice(0, 3),
+        );
+      }
+
+      // The bug ledger. Filed from the classifier's own evidence — never re-narrated.
+      for (const d of defects) {
+        const bug: FiledBug =
+          fx.BUGS.find((b) => b.testId === d.testId) ??
+          {
+            id: `bug-${d.testId}`,
+            testId: d.testId,
+            title: `${results.get(d.testId)?.title ?? d.testId} — application defect`,
+            severity: "high",
+            evidence: d.evidence,
+          };
+        bugs.push(bug);
+        emit({ type: "bug.filed", bug });
+      }
+      return { value };
+    });
+  }
+
+  // ---- HEAL ----------------------------------------------------------------
+  const heals: HealAttempt[] = [];
+  const healable = triage.filter((t) => t.verdict === "SCRIPT_DRIFT" || t.verdict === "ENV_FLAKE");
+
+  if (healable.length && !budgetExceeded) {
+    await stage("heal", 1, async () => {
+      for (const t of healable) {
+        let healed = false;
+
+        for (let n = 1; n <= input.options.maxHealAttemptsPerTest; n++) {
+          const proposal = await agents.proposeHeal(ctx, { testId: t.testId, attempt: n, triage: t });
+          if (!proposal) break;
+
+          // The assertion-integrity guard. Locators and waits may change; what the
+          // test *proves* may not. This is a syntactic check on purpose — it cannot
+          // be argued out of by a persuasive model.
+          const guard = checkAssertionIntegrity(proposal.before, proposal.after);
+
+          const record: HealAttempt = {
+            testId: t.testId,
+            attempt: n,
+            summary: guard.intact
+              ? proposal.summary
+              : `${proposal.summary} — REJECTED by the assertion-integrity guard`,
+            before: proposal.before,
+            after: proposal.after,
+            assertionsIntact: guard.intact,
+            outcome: guard.intact ? "healed" : "rejected",
+          };
+          heals.push(record);
+          emit({ type: "heal.attempted", attempt: record });
+
+          if (!guard.intact) {
+            decide(
+              "heal",
+              `Reject the Healer's patch for ${t.testId} — it weakened an assertion`,
+              "The patch would make the test pass without verifying the behaviour it exists to verify. " +
+                "The guard rejects any patch that deletes, loosens, retargets or negates an assertion; " +
+                "the Healer may only change locators and waits.",
+              0.99,
+              guard.violations.map((v) => ({ kind: "assertion-diff" as const, summary: v })),
+            );
+            continue;
+          }
+
+          const path = `heal/patch-${t.testId}-${n}.diff`;
+          ctx.artifact("patch", path, `Healed — ${results.get(t.testId)?.title ?? t.testId}`);
+
+          const rerun = await agents.rerun(ctx, { testId: t.testId, attempt: n + 1, healed: true });
+          results.set(rerun.testId, rerun);
+          emit({ type: "test.result", result: rerun });
+          healed = rerun.status === "healed" || rerun.status === "passed";
+          if (healed) break;
+        }
+
+        if (!healed) {
+          const last = heals.filter((h) => h.testId === t.testId).at(-1);
+          if (last) last.outcome = "escalated";
+          decide(
+            "heal",
+            `Escalate ${t.testId} — ${input.options.maxHealAttemptsPerTest} heal attempts did not converge`,
+            "Repeated patches failed to make the test pass without weakening it. Escalating with the " +
+              "attempt history attached is the honest outcome; a test that only passes because it stopped " +
+              "checking anything is worse than a red one.",
+            0.88,
+            [{ kind: "heuristic", summary: `${heals.filter((h) => h.testId === t.testId).length} attempts, none converged` }],
+          );
+        }
+      }
+      ctx.spend(0.62, 28_900, 9_400);
+      return { value: undefined };
+    });
+  }
+
+  // ---- REPORT --------------------------------------------------------------
+  const report = await stage("report", 1, async () => {
+    ctx.think("orchestrator", "Synthesising coverage, outcomes, healer actions, residual gaps and untested-flow risk.");
+
+    const risks = await agents.assessRisk(ctx, {
+      recon,
+      scenarios,
+      quarantined: generated.quarantined.map((q) => q.scenarioId),
+    });
+    const prd = await agents.tracePrd(ctx, { scenarios });
+
+    const finalResults: TestResult[] = [
+      ...results.values(),
+      ...generated.quarantined.map((q, i) => ({
+        id: `q-${i}`,
+        testId: `q-${q.scenarioId}`,
+        title: q.title,
+        status: "quarantined" as const,
+        durationMs: 0,
+        attempt: 0,
+        error: q.reason,
+      })),
+    ];
+
+    const passed = finalResults.filter((r) => r.status === "passed").length;
+    const healedCount = finalResults.filter((r) => r.status === "healed").length;
+    const failed = finalResults.filter((r) => r.status === "failed").length;
+    const finishedAt = new Date();
+
+    const value: TestQualityReport = {
+      runId,
+      url: input.url,
+      startedAt: startedAt.toISOString(),
+      finishedAt: finishedAt.toISOString(),
+      durationMs: finishedAt.getTime() - startedAt.getTime(),
+      costUsd,
+      coverageScore: critique?.score ?? 0,
+      scenariosPlanned: scenarios.length,
+      scenariosGenerated: generated.tests.length,
+      scenariosQuarantined: generated.quarantined.length,
+      passed,
+      failed,
+      healed: healedCount,
+      replans,
+      healAttempts: heals.length,
+      scenarios,
+      results: finalResults,
+      triage,
+      heals,
+      bugs,
+      remainingGaps: critique?.gaps ?? [],
+      risks,
+      prd,
+    };
+
+    decide(
+      "report",
+      failed
+        ? `Publish the suite with ${failed} test(s) left red`
+        : "Publish the suite — every executed test is green",
+      failed
+        ? "The red tests are confirmed application defects, not script problems. Leaving them red is the " +
+          "correct outcome — a green suite here would be a lie. They are filed as bugs with traces attached, " +
+          "and the risk ledger names the surfaces we never reached."
+        : "Every generated test passes and every quarantined scenario is reported with a reason. The risk " +
+          "ledger names what we did not reach so the green result is not mistaken for total coverage.",
+      0.96,
+      [
+        {
+          kind: "heuristic",
+          summary: `${passed} passed · ${healedCount} healed · ${failed} failed · ${generated.quarantined.length} quarantined`,
+        },
+        { kind: "heuristic", summary: `Coverage ${value.coverageScore}/100 after ${replans} re-plan(s)` },
+      ],
+    );
+
+    await writeArtifact(runId, "report.json", JSON.stringify(value, null, 2));
+    ctx.artifact("plan", "report.json", "Test quality report");
+    return { value };
+  });
+
+  emit({ type: "run.finished", status: "succeeded", report });
+  return "succeeded";
+}

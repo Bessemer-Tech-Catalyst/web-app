@@ -1,7 +1,4 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 import {
   Badge,
   Section,
@@ -12,15 +9,9 @@ import {
   Stat,
   type Tone,
 } from "@/components/ui/primitives";
-import { buildMockRun, MOCK_TARGET_URL } from "@/lib/mock-run";
-import { loadDraft } from "@/lib/run-draft";
 import {
-  DEFAULT_RUN_OPTIONS,
-  emptyRunState,
-  reduceRun,
   TRIAGE_META,
   type Priority,
-  type RunInput,
   type TestQualityReport,
   type TestStatus,
 } from "@/lib/types";
@@ -42,30 +33,13 @@ const STATUS_TONE: Record<TestStatus, Tone> = {
   pending: "neutral",
 };
 
-export function ReportView({ runId }: { runId: string }) {
-  const [input, setInput] = useState<RunInput | null>(null);
-
-  useEffect(() => {
-    setInput(
-      loadDraft(runId) ?? {
-        url: MOCK_TARGET_URL,
-        intent: "focus on checkout and authentication flows",
-        options: DEFAULT_RUN_OPTIONS,
-      },
-    );
-  }, [runId]);
-
-  const report = useMemo<TestQualityReport | null>(() => {
-    if (!input) return null;
-    const folded = buildMockRun(runId, input).reduce(
-      (acc, t) => reduceRun(acc, t.event),
-      emptyRunState(),
-    );
-    return folded.report;
-  }, [runId, input]);
-
-  if (!report) return null;
-
+export function ReportView({
+  runId,
+  report,
+}: {
+  runId: string;
+  report: TestQualityReport;
+}) {
   const executed = report.results.filter((r) => r.status !== "quarantined");
   const green = report.passed + report.healed;
   const passRate = executed.length ? Math.round((green / executed.length) * 100) : 0;
