@@ -110,7 +110,14 @@ export function DecisionLog({ decisions }: { decisions: DecisionEvent[] }) {
   );
 }
 
-function Confidence({ value }: { value: number }) {
+/**
+ * Rendered only where a confidence was actually computed. Most decisions do not carry
+ * one, and an absent badge is the honest rendering of that — a judge asking "what does
+ * 96% mean?" about a literal somebody typed is a hole; the same question about a number
+ * derived from the classifier's per-failure confidences has an answer.
+ */
+function Confidence({ value }: { value: number | undefined }) {
+  if (value === undefined) return null;
   const pct = Math.round(value * 100);
   const tone =
     value >= 0.9 ? "text-ok-400" : value >= 0.75 ? "text-warn-500" : "text-danger-400";

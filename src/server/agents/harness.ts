@@ -19,6 +19,16 @@ import { redact } from "../event-log";
 import type { AgentContext } from "../orchestrator/agents";
 import type { AgentName } from "@/lib/types";
 
+/** One completed tool call, as the caller sees it. See `AgentRunSpec.onTool`. */
+export interface ToolObservation {
+  name: string;
+  /** The raw JSON arguments string, redacted. */
+  args: string;
+  /** The tool's own reply, redacted and untruncated. */
+  output: string;
+  ok: boolean;
+}
+
 export interface AgentRunSpec<S extends z.ZodType> {
   /** Which lane the narration shows up in. */
   as: AgentName;
@@ -31,6 +41,16 @@ export interface AgentRunSpec<S extends z.ZodType> {
   mcpServers?: MCPServer[];
   /** Hard ceiling on agentic looping. A wedged agent is a hung demo. */
   maxTurns?: number;
+  /**
+   * Every tool call's full reply, as it lands.
+   *
+   * The Generator needs this: Playwright MCP answers a click, a fill or a
+   * `browser_generate_locator` with the exact locator expression it resolved, and that
+   * reply is the only record that an element was ever proven to exist. Reading it here —
+   * rather than believing the model's account of what it found — is what makes
+   * "every emitted locator was verified" a measurement instead of a claim.
+   */
+  onTool?: (observation: ToolObservation) => void;
 }
 
 /**
@@ -69,7 +89,7 @@ export async function runStructured<S extends z.ZodType>(
   });
 
   // Names the pending call so its output event can report the outcome against it.
-  const pending = new Map<string, string>();
+  const pending = new Map<string, { name: string; args: string }>();
 
   for await (const event of stream) {
     if (event.type !== "run_item_stream_event") continue;
@@ -87,17 +107,27 @@ export async function runStructured<S extends z.ZodType>(
     if (item.type === "tool_call_item") {
       const raw = item.rawItem as { type: string; callId?: string; name?: string; arguments?: string };
       if (raw.type !== "function_call" || !raw.name) continue;
-      if (raw.callId) pending.set(raw.callId, raw.name);
-      ctx.tool(spec.as, raw.name, clean(summariseArgs(raw.arguments)));
+      // Redaction runs before truncation, not after. The other way round, a secret cut
+      // in half by the ellipsis no longer matches the value `redact()` looks for, and
+      // the surviving half reaches the event log.
+      const args = clean(raw.arguments ?? "");
+      if (raw.callId) pending.set(raw.callId, { name: raw.name, args });
+      ctx.tool(spec.as, raw.name, summariseArgs(args));
       continue;
     }
 
     if (item.type === "tool_call_output_item") {
       const raw = item.rawItem as { callId?: string; status?: string };
-      const name = (raw.callId && pending.get(raw.callId)) || "tool";
+      const call = (raw.callId && pending.get(raw.callId)) || { name: "tool", args: "" };
       if (raw.callId) pending.delete(raw.callId);
-      const ok = raw.status !== "incomplete";
-      if (!ok) ctx.tool(spec.as, name, clean(summariseOutput(item.output)), false);
+      const output = clean(textOf(item.output));
+      // Playwright MCP reports a browser-side failure — a missing element, a blocked
+      // navigation — as a normal reply whose body starts "### Error", not as a transport
+      // failure. Treating those as successes made the activity feed claim the agent found
+      // things it did not, which is precisely the lie this stage exists to prevent.
+      const ok = raw.status !== "incomplete" && !/(^|\n)### Error\b/.test(output);
+      if (!ok) ctx.tool(spec.as, call.name, elide(output, 200, 260), false);
+      spec.onTool?.({ name: call.name, args: call.args, output, ok });
       continue;
     }
 
@@ -125,7 +155,7 @@ export async function runStructured<S extends z.ZodType>(
 }
 
 /** A tool call's arguments, compacted to one readable line for the Decision Log. */
-function summariseArgs(args: string | undefined): string {
+function summariseArgs(args: string): string {
   if (!args) return "—";
   try {
     const parsed = JSON.parse(args) as Record<string, unknown>;
@@ -138,11 +168,46 @@ function summariseArgs(args: string | undefined): string {
   }
 }
 
-function summariseOutput(output: unknown): string {
-  const text = typeof output === "string" ? output : JSON.stringify(output);
-  return truncate(text ?? "", 200);
+/**
+ * A tool reply as text. MCP replies arrive as a content array; the SDK hands them over
+ * as either a plain string or that array, depending on the transport.
+ */
+function textOf(output: unknown): string {
+  if (typeof output === "string") return output;
+  if (Array.isArray(output)) {
+    return output
+      .map((part) =>
+        part && typeof part === "object" && "text" in part
+          ? String((part as { text: unknown }).text)
+          : typeof part === "string"
+            ? part
+            : "",
+      )
+      .join("\n");
+  }
+  if (output && typeof output === "object") {
+    const o = output as { text?: unknown; content?: unknown };
+    if (typeof o.text === "string") return o.text;
+    if (o.content !== undefined) return textOf(o.content);
+  }
+  return output === undefined ? "" : JSON.stringify(output);
 }
 
 function truncate(s: string, n: number): string {
   return s.length <= n ? s : `${s.slice(0, n - 1)}…`;
+}
+
+/**
+ * Keeps both ends of a long reply.
+ *
+ * Playwright puts the *cause* of an actionability failure on the last line of its call
+ * log — "<div …> intercepts pointer events", "element is not stable", "element is not
+ * enabled". Truncating from the front keeps only "waiting for getByRole(…) · locator
+ * resolved to <button class=…", which says the element exists and nothing about why the
+ * click never landed. That is the difference between an event log you can debug a run
+ * from and one that just tells you something went wrong.
+ */
+function elide(s: string, head: number, tail: number): string {
+  if (s.length <= head + tail + 3) return s;
+  return `${s.slice(0, head)}\n…\n${s.slice(-tail)}`;
 }

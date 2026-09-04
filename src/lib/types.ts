@@ -371,13 +371,22 @@ export type OrchestratorEvent = EventBase &
         outcome: "ok" | "replan" | "failed";
         durationMs: number;
       }
-    /** The money event. Every judgment the orchestrator makes, with its reasoning. */
+    /**
+     * The money event. Every judgment the orchestrator makes, with its reasoning.
+     *
+     * `confidence` is optional and is present *only* where something computed it — the
+     * triage verdict takes the minimum of the classifier's own per-failure confidences,
+     * and that is currently the only one. It used to be mandatory, which meant twelve
+     * decisions rendered a percentage badge and eleven of those were literals a developer
+     * typed. A number on the panel the UX score is judged on has to mean something, so a
+     * decision that did not measure one now shows no badge instead of a plausible one.
+     */
     | {
         type: "decision";
         stage: Stage;
         action: string;
         rationale: string;
-        confidence: number;
+        confidence?: number;
         evidence: Evidence[];
       }
     | { type: "agent.thinking"; agent: AgentName; text: string }

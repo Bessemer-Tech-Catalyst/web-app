@@ -1,7 +1,8 @@
 /**
  * Which agents are real, per method.
  *
- * Phase 3 ships Recon, the Planner and the Critic. Everything downstream is still
+ * Phases 3-4 ship Recon, the Planner, the Critic, the Generator and the Executor.
+ * Everything downstream is still
  * `stubAgents`, and the composition below is a per-method merge rather than an
  * all-or-nothing switch on purpose: being able to run "real Planner, stubbed everything
  * else" is what makes a six-stage pipeline debuggable, and the all-stub configuration
@@ -14,9 +15,9 @@
  *   ODYSSEY_REAL_AGENTS=plan        real Planner, everything else stubbed
  *   ODYSSEY_REAL_AGENTS=recon,plan  as above, plus real Recon
  *
- * Method names match the `Agents` interface: recon, plan, critique. Naming a stage that
- * Phase 3 has not built yet is a configuration error and is reported as one, rather
- * than silently doing nothing.
+ * Method names match the `Agents` interface: recon, plan, critique, generate, execute.
+ * Naming a stage that has not been built yet is a configuration error and is reported as
+ * one, rather than silently doing nothing.
  */
 
 import { stubAgents } from "../orchestrator/stub-agents";
@@ -24,10 +25,12 @@ import { hasApiKey } from "./openai";
 import { recon } from "./recon";
 import { plan } from "./planner";
 import { critique } from "./critic";
+import { generate } from "./generator";
+import { execute } from "./executor";
 import type { Agents } from "../orchestrator/agents";
 
-/** Everything Phase 3 implements for real. Extended in Phases 4-6. */
-const REAL: Partial<Agents> = { recon, plan, critique };
+/** Everything Phases 3-4 implement for real. Extended in Phases 5-6. */
+const REAL: Partial<Agents> = { recon, plan, critique, generate, execute };
 
 export type RealAgentName = keyof typeof REAL;
 
@@ -78,7 +81,7 @@ function parse(spec: string | undefined, notes: string[]): RealAgentName[] {
       out.push(name as RealAgentName);
     } else {
       notes.push(
-        `ODYSSEY_REAL_AGENTS names "${name}", which Phase 3 does not implement. ` +
+        `ODYSSEY_REAL_AGENTS names "${name}", which no phase implements yet. ` +
           `Implemented: ${names.join(", ")}. That stage will run stubbed.`,
       );
     }

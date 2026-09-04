@@ -44,6 +44,16 @@ export interface AgentContext {
   ): void;
   /** Token spend, reported per stage so the budget guard can act mid-run. */
   spend(usd: number, tokensIn: number, tokensOut: number): void;
+  /**
+   * Whether this run has passed the budget ceiling its caller set.
+   *
+   * A stage that spends per unit of work — the Generator runs one agent per scenario —
+   * has to ask, because nothing else can stop it partway. Without this the ceiling only
+   * governed re-planning and healing, so a run could sail past a $3 limit inside the one
+   * stage that accounts for most of the bill, while the Decision Log said it had
+   * "degraded gracefully rather than pressing on".
+   */
+  overBudget(): boolean;
 }
 
 export interface ReconResult {
