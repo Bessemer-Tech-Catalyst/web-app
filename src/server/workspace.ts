@@ -7,7 +7,7 @@
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
-import { WATCH_SETTLE_MS, headed } from "./browser-mode";
+import { WATCH_SETTLE_MS, WATCH_VIEWPORT, headed } from "./browser-mode";
 import { redact } from "./event-log";
 import { runDir, runPath } from "./paths";
 import type { RunInput } from "@/lib/types";
@@ -123,7 +123,27 @@ export default defineConfig({
     video: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      // The project's \`use\` is merged *over* the top-level one, so anything that has to
+      // survive has to be stated here — including the viewport, which
+      // \`devices["Desktop Chrome"]\` pins to 1280x720.
+      use: {
+        ...devices["Desktop Chrome"],${
+          watched
+            ? `
+        // A locator is proven at whatever size the Generator browsed at, and a
+        // responsive app is a different app at a different width: a nav that is a row of
+        // buttons at 1280 is a hamburger at 900, so a locator resolved in one is missing
+        // or covered in the other. Proving at one viewport and asserting at another is
+        // not a test of the app, it is a test of the coincidence that they agree.
+        viewport: { width: ${WATCH_VIEWPORT.width}, height: ${WATCH_VIEWPORT.height} },`
+            : ""
+        }
+      },
+    },
+  ],
 });
 `;
 }

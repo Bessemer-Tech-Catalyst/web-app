@@ -1,0 +1,166 @@
+{
+  "config": {
+    "argv": [
+      "/Users/satyam/.nvm/versions/node/v24.15.0/bin/node",
+      "/Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/node_modules/.pnpm/@playwright+test@1.63.0-alpha-2026-08-31/node_modules/@playwright/test/cli.js",
+      "test"
+    ],
+    "configFile": "/Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/.odyssey/runs/run_6ed4bb62/playwright.config.ts",
+    "rootDir": "/Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/.odyssey/runs/run_6ed4bb62/tests",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": true,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/.odyssey/runs/run_6ed4bb62/results/artifacts",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/.odyssey/runs/run_6ed4bb62/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 90000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json",
+        {
+          "outputFile": "results/results.json"
+        }
+      ],
+      [
+        "html",
+        {
+          "open": "never"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0-alpha-2026-08-31",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "todos-add-active-item.spec.ts",
+      "file": "todos-add-active-item.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "Add a todo and verify the active list",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 90000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 2130,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('todo-title')\nExpected: \u001b[32m\"Buy groceries\"\u001b[39m\nError: strict mode violation: getByTestId('todo-title') resolved to 2 elements:\n    1) <label data-testid=\"todo-title\">Recon sample</label> aka getByText('Recon sample')\n    2) <label data-testid=\"todo-title\">Buy groceries</label> aka getByText('Buy groceries')\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('todo-title') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('todo-title')\u001b[22m\n",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('todo-title')\nExpected: \u001b[32m\"Buy groceries\"\u001b[39m\nError: strict mode violation: getByTestId('todo-title') resolved to 2 elements:\n    1) <label data-testid=\"todo-title\">Recon sample</label> aka getByText('Recon sample')\n    2) <label data-testid=\"todo-title\">Buy groceries</label> aka getByText('Buy groceries')\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('todo-title') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('todo-title')\u001b[22m\n\n    at /Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/.odyssey/runs/run_6ed4bb62/tests/todos-add-active-item.spec.ts:11:48",
+                    "location": {
+                      "file": "/Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/.odyssey/runs/run_6ed4bb62/tests/todos-add-active-item.spec.ts",
+                      "column": 48,
+                      "line": 11
+                    },
+                    "snippet": "   9 |\n  10 |   await expect(page).toHaveURL(/\\/todomvc\\/#\\/active$/);\n> 11 |   await expect(page.getByTestId(\"todo-title\")).toHaveText(\"Buy groceries\");\n     |                                                ^\n  12 |   await expect(page.getByTestId(\"todo-count\")).toHaveText(\"1 item left\");\n  13 | });\n  14 |"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/.odyssey/runs/run_6ed4bb62/tests/todos-add-active-item.spec.ts",
+                        "column": 48,
+                        "line": 11
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoHaveText\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m)\u001b[22m failed\n\nLocator: getByTestId('todo-title')\nExpected: \u001b[32m\"Buy groceries\"\u001b[39m\nError: strict mode violation: getByTestId('todo-title') resolved to 2 elements:\n    1) <label data-testid=\"todo-title\">Recon sample</label> aka getByText('Recon sample')\n    2) <label data-testid=\"todo-title\">Buy groceries</label> aka getByText('Buy groceries')\n\nCall log:\n\u001b[2m  - Expect \"toHaveText\" getByTestId('todo-title') with timeout 5000ms\u001b[22m\n\u001b[2m  - waiting for getByTestId('todo-title')\u001b[22m\n\n\n   9 |\n  10 |   await expect(page).toHaveURL(/\\/todomvc\\/#\\/active$/);\n> 11 |   await expect(page.getByTestId(\"todo-title\")).toHaveText(\"Buy groceries\");\n     |                                                ^\n  12 |   await expect(page.getByTestId(\"todo-count\")).toHaveText(\"1 item left\");\n  13 | });\n  14 |\n    at /Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/.odyssey/runs/run_6ed4bb62/tests/todos-add-active-item.spec.ts:11:48"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-09-04T20:47:56.070Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/.odyssey/runs/run_6ed4bb62/results/artifacts/todos-add-active-item-Add-a-todo-and-verify-the-active-list-chromium/test-failed-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/.odyssey/runs/run_6ed4bb62/results/artifacts/todos-add-active-item-Add-a-todo-and-verify-the-active-list-chromium/video.webm"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/.odyssey/runs/run_6ed4bb62/results/artifacts/todos-add-active-item-Add-a-todo-and-verify-the-active-list-chromium/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/.odyssey/runs/run_6ed4bb62/results/artifacts/todos-add-active-item-Add-a-todo-and-verify-the-active-list-chromium/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/satyam/Documents/projects/web-app/.claude/worktrees/implementation-phase-one-8aa8ac/.odyssey/runs/run_6ed4bb62/tests/todos-add-active-item.spec.ts",
+                    "column": 48,
+                    "line": 11
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "5c21fee77123f41460d9-c53376ca717536edffa4",
+          "file": "todos-add-active-item.spec.ts",
+          "line": 3,
+          "column": 5
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-09-04T20:47:55.917Z",
+    "duration": 2822.154,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}
