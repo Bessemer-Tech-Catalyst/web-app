@@ -42,3 +42,6 @@ next-env.d.ts
 
 # run workspaces (event logs, generated suites, traces)
 /.odyssey/
+
+# Playwright MCP scratch output (traces, page dumps) from ad-hoc probes
+/.playwright-mcp/

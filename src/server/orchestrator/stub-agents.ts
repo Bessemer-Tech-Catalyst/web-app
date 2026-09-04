@@ -9,6 +9,7 @@
  * `ODYSSEY_STUB_SPEED` divides every delay; set it high in tests.
  */
 
+import { renderSpec } from "../agents/spec-format";
 import { writeArtifact } from "../workspace";
 import type {
   Agents,
@@ -253,27 +254,6 @@ export const stubAgents: Agents = {
 // ---------------------------------------------------------------------------
 // File bodies — real files, so the workspace is genuinely inspectable in Phase 2
 // ---------------------------------------------------------------------------
-
-function renderSpec(url: string, scenarios: Scenario[]): string {
-  const lines = [`# Test plan — ${url}`, ""];
-  for (const [i, s] of scenarios.entries()) {
-    lines.push(
-      `## ${i + 1}. ${s.title}`,
-      "",
-      `- **Flow:** ${s.flow}`,
-      `- **Kind:** ${s.kind}`,
-      `- **Priority:** ${s.priority}`,
-      s.addedByCritique ? "- **Added by:** coverage critic" : "",
-      "",
-      "**Steps**",
-      ...s.steps.map((step, j) => `${j + 1}. ${step}`),
-      "",
-      `**Expected:** ${s.expected}`,
-      "",
-    );
-  }
-  return lines.filter((l) => l !== "").join("\n") + "\n";
-}
 
 function specFor(test: GeneratedTest): string {
   return `import { test, expect } from "@playwright/test";
