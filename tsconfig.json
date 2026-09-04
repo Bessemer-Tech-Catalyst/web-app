@@ -9,6 +9,10 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
+    // The `*.test.mts` files are run by `node --test`, which resolves ESM specifiers
+    // literally and so needs the `.ts` extension written out. Legal here only because
+    // `noEmit` is set — nothing rewrites these specifiers, Node reads them as they are.
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",

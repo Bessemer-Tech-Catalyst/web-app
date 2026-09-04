@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Git worktrees are second checkouts of this repo, carrying their own node_modules
+    // and run artifacts. Linting them buries the real findings under ~38k duplicates.
+    ".claude/**",
+    // Run workspaces: generated suites and Playwright output, not source.
+    ".odyssey/**",
   ]),
 ]);
 

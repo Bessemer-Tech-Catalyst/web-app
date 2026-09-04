@@ -26,6 +26,7 @@ import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { runDir, runPath } from "../paths";
+import { keyOf, specsIn, type PwReport, type PwSpec } from "./report-keys";
 import type { AgentContext } from "../orchestrator/agents";
 import type { GeneratedTest, TestResult, TestStatus } from "@/lib/types";
 
@@ -199,29 +200,9 @@ function spawnPlaywright(ctx: AgentContext, cli: string, args: string[]): Promis
 // ---------------------------------------------------------------------------
 // The JSON report
 // ---------------------------------------------------------------------------
-
-interface PwResultEntry {
-  status?: string;
-  duration?: number;
-  error?: { message?: string };
-  attachments?: { name?: string; path?: string; contentType?: string }[];
-}
-interface PwSpec {
-  title?: string;
-  file?: string;
-  tests?: { results?: PwResultEntry[] }[];
-}
-interface PwSuite {
-  file?: string;
-  specs?: PwSpec[];
-  suites?: PwSuite[];
-}
-interface PwReport {
-  suites?: PwSuite[];
-  errors?: { message?: string }[];
-  /** `rootDir` is what every `file` in the report is relative to. See `keyOf`. */
-  config?: { rootDir?: string };
-}
+//
+// `specsIn` and `keyOf` — the match itself — live in `./report-keys` so that
+// `report-keys.test.ts` can load and pin them; see the header there.
 
 async function readReport(ctx: AgentContext): Promise<PwReport | null> {
   try {
@@ -229,40 +210,6 @@ async function readReport(ctx: AgentContext): Promise<PwReport | null> {
   } catch {
     return null;
   }
-}
-
-function specsIn(report: PwReport): (PwSpec & { file: string })[] {
-  const out: (PwSpec & { file: string })[] = [];
-  const walk = (suites: PwSuite[] | undefined, inheritedFile: string) => {
-    for (const suite of suites ?? []) {
-      const file = suite.file ?? inheritedFile;
-      for (const spec of suite.specs ?? []) out.push({ ...spec, file: spec.file ?? file });
-      walk(suite.suites, file);
-    }
-  };
-  walk(report.suites, "");
-  return out;
-}
-
-/**
- * One key both sides of the match can be expressed in: the file's path relative to the
- * run workspace.
- *
- * This is not the string tidy-up it looks like. Playwright sets `config.rootDir` to the
- * common ancestor of the test files it collected, and with every generated spec sitting
- * directly in `tests/`, that ancestor is the *tests directory* — so the report calls the
- * file `login.spec.ts` while the run recorded it as `tests/login.spec.ts`. Comparing
- * those as strings matches nothing, and since an unmatched generated test is reported as
- * a failure, a suite that passed every test reports as a suite that failed every test.
- * That is precisely what this did before a real suite was ever run through it.
- *
- * Resolving each side against its own root and re-relativising is the comparison that
- * keeps working when Playwright moves `rootDir` — which it does, silently, whenever the
- * shape of the generated tree changes.
- */
-function keyOf(file: string, root: string, workspace: string): string {
-  const abs = path.isAbsolute(file) ? file : path.resolve(root, file);
-  return path.relative(workspace, abs).split(path.sep).join("/");
 }
 
 /**
