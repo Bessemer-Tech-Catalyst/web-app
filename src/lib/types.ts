@@ -93,12 +93,17 @@ export interface RunInput {
   options: RunOptions;
 }
 
+/**
+ * Note what is *not* here: a headless switch. Every run drives a visible browser, and
+ * that is an invariant of the product rather than a per-run choice — see
+ * `src/server/browser-mode.ts`. Making it an option would let an API caller silently
+ * turn off half of what the run shows you.
+ */
 export interface RunOptions {
   maxScenarios: number;
   maxReplans: number;
   maxHealAttemptsPerTest: number;
   parallelWorkers: number;
-  headless: boolean;
   budgetUsd: number;
 }
 
@@ -107,10 +112,6 @@ export const DEFAULT_RUN_OPTIONS: RunOptions = {
   maxReplans: 2,
   maxHealAttemptsPerTest: 2,
   parallelWorkers: 4,
-  // Headed by default: watching the agent drive the app is most of what makes this
-  // legible to someone who has not read the event log. Set to true for CI, where a
-  // window is a liability rather than the point.
-  headless: false,
   budgetUsd: 5,
 };
 

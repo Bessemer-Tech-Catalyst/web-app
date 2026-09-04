@@ -6,6 +6,13 @@
  * transport, the event log, the crash-recovery path and the UI are all exercised
  * exactly as they will be in production. Only the thinking is fake.
  *
+ * What they must never fake is money. A stub calls no model, so it costs nothing and
+ * reports nothing: `ctx.spend` is for real usage measured by the harness, and a stub that
+ * invented a plausible number made the cost meter a prop. It was not a small lie — a run
+ * with three real agents showed $1.26 of which $1.20 was fabricated, so the on-screen
+ * figure was 95% fiction and the budget guard was gating on it. A stubbed run now reads
+ * $0.00, which is both true and the fastest way to see which stages are real.
+ *
  * `ODYSSEY_STUB_SPEED` divides every delay; set it high in tests.
  */
 
@@ -79,7 +86,6 @@ export const stubAgents: Agents = {
 
     await writeArtifact(ctx.runId, "recon.json", JSON.stringify(result, null, 2));
     ctx.artifact("plan", "recon.json", `Recon map — ${result.routes.length} routes, 19 interactive surfaces`);
-    ctx.spend(0.21, 18_400, 2_100);
     return result;
   },
 
@@ -112,7 +118,6 @@ export const stubAgents: Agents = {
       `Test plan v${req.attempt} — ${scenarios.length} scenarios` +
         (req.attempt > 1 ? ` (${scenarios.filter((s) => s.addedByCritique).length} added by critique)` : ""),
     );
-    ctx.spend(req.attempt === 1 ? 0.34 : 0.41, req.attempt === 1 ? 22_800 : 26_100, req.attempt === 1 ? 4_600 : 7_300);
     return scenarios;
   },
 
@@ -157,7 +162,6 @@ export const stubAgents: Agents = {
       quarantined.push(q);
     }
 
-    ctx.spend(1.12, 61_400, 22_900);
     return { tests, quarantined };
   },
 
@@ -190,7 +194,6 @@ export const stubAgents: Agents = {
     }
 
     await writeArtifact(ctx.runId, "results/results.json", JSON.stringify(out, null, 2));
-    ctx.spend(0.08, 4_200, 900);
     return out;
   },
 
@@ -206,7 +209,6 @@ export const stubAgents: Agents = {
       ctx.tool("classifier", "browser_snapshot", `Re-snapshotted the failure page for ${outcome.testId}`);
       out.push(outcome);
     }
-    ctx.spend(0.47, 31_700, 6_800);
     return out;
   },
 

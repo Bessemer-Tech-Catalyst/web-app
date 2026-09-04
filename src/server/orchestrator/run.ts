@@ -19,7 +19,6 @@
 
 import { checkAssertionIntegrity } from "./assertion-guard";
 import { stubAgents } from "./stub-agents";
-import * as fx from "./fixtures";
 import type { AgentContext, Agents, ReconResult } from "./agents";
 import { runDir } from "../paths";
 import { writeArtifact } from "../workspace";
@@ -243,14 +242,22 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
   // ---- EXECUTE -------------------------------------------------------------
   const results = new Map<string, TestResult>();
   const firstPass = await stage("execute", 1, async () => {
-    decide(
-      "execute",
-      `Shard ${generated.tests.length} tests across ${input.options.parallelWorkers} workers`,
-      "Flows are independent and each test bootstraps its own session through the seed fixture, " +
-        "so there is no shared-state hazard. Serial execution would take roughly 4× as long.",
-      0.92,
-      [{ kind: "heuristic", summary: "No cross-test fixtures or shared mutable state detected" }],
-    );
+    // Only a real fan-out is worth a decision. This used to announce a sharding
+    // rationale unconditionally — including "Shard 0 tests across 4 workers", citing
+    // evidence ("no shared mutable state detected") that nothing in the pipeline
+    // measures. A Decision Log entry has to correspond to a choice actually made.
+    if (generated.tests.length > 1 && input.options.parallelWorkers > 1) {
+      const workers = Math.min(input.options.parallelWorkers, generated.tests.length);
+      decide(
+        "execute",
+        `Shard ${generated.tests.length} tests across ${workers} workers`,
+        "Each generated test bootstraps its own session, so the suite has no ordering " +
+          `requirement between flows and can be split. ${workers} workers is this run's ` +
+          "parallelism setting bounded by the test count, so no worker starts idle.",
+        0.9,
+        [{ kind: "heuristic", summary: `${generated.tests.length} independent tests, ${workers} workers` }],
+      );
+    }
     return { value: await agents.execute(ctx, { tests: generated.tests, attempt: 1 }) };
   });
 
@@ -286,17 +293,18 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
         );
       }
 
-      // The bug ledger. Filed from the classifier's own evidence — never re-narrated.
+      // The bug ledger. Filed from the classifier's own evidence — never re-narrated,
+      // and never enriched from a fixture: this used to prefer a hand-written record out
+      // of `fixtures.ts` whenever a testId happened to match, which meant the orchestrator
+      // could file a bug the classifier had not actually found.
       for (const d of defects) {
-        const bug: FiledBug =
-          fx.BUGS.find((b) => b.testId === d.testId) ??
-          {
-            id: `bug-${d.testId}`,
-            testId: d.testId,
-            title: `${results.get(d.testId)?.title ?? d.testId} — application defect`,
-            severity: "high",
-            evidence: d.evidence,
-          };
+        const bug: FiledBug = {
+          id: `bug-${d.testId}`,
+          testId: d.testId,
+          title: `${results.get(d.testId)?.title ?? d.testId} — application defect`,
+          severity: "high",
+          evidence: d.evidence,
+        };
         bugs.push(bug);
         emit({ type: "bug.filed", bug });
       }
@@ -373,7 +381,6 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
           );
         }
       }
-      ctx.spend(0.62, 28_900, 9_400);
       return { value: undefined };
     });
   }
@@ -433,18 +440,30 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
       prd,
     };
 
+    // "Every executed test is green" is only true when something executed. With an empty
+    // suite that sentence was published as a success, which is the single most misleading
+    // thing this report could say: zero tests is a pipeline failure wearing a pass.
+    const executed = passed + healedCount + failed;
+
     decide(
       "report",
-      failed
-        ? `Publish the suite with ${failed} test(s) left red`
-        : "Publish the suite — every executed test is green",
-      failed
-        ? "The red tests are confirmed application defects, not script problems. Leaving them red is the " +
-          "correct outcome — a green suite here would be a lie. They are filed as bugs with traces attached, " +
-          "and the risk ledger names the surfaces we never reached."
-        : "Every generated test passes and every quarantined scenario is reported with a reason. The risk " +
-          "ledger names what we did not reach so the green result is not mistaken for total coverage.",
-      0.96,
+      executed === 0
+        ? "Publish an empty report — the pipeline produced no executable tests"
+        : failed
+          ? `Publish the suite with ${failed} test(s) left red`
+          : "Publish the suite — every executed test is green",
+      executed === 0
+        ? `The plan reached ${scenarios.length} scenario(s) but none became a running test, so there is no ` +
+          "evidence here about whether the application works. This is reported as the failure it is rather " +
+          "than as a green run: a report that says nothing went wrong, when nothing ran, is worse than no " +
+          "report. The risk ledger below is the entire result."
+        : failed
+          ? "The red tests are confirmed application defects, not script problems. Leaving them red is the " +
+            "correct outcome — a green suite here would be a lie. They are filed as bugs with traces attached, " +
+            "and the risk ledger names the surfaces we never reached."
+          : "Every generated test passes and every quarantined scenario is reported with a reason. The risk " +
+            "ledger names what we did not reach so the green result is not mistaken for total coverage.",
+      executed === 0 ? 0.99 : 0.96,
       [
         {
           kind: "heuristic",

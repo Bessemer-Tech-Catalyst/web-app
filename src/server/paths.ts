@@ -24,6 +24,16 @@ export const runPath = (runId: string, ...rest: string[]) =>
 
 export const eventsFile = (runId: string) => runPath(runId, "events.ndjson");
 
+/**
+ * The browser profile every agent in a run shares.
+ *
+ * This is how a login survives past the agent that performed it: Recon signs in, its
+ * cookies land in this directory, and the Planner and Generator that follow point their
+ * own browsers at the same profile and start already authenticated. One directory per
+ * run, so two runs still cannot see each other's session.
+ */
+export const profileDir = (runId: string) => runPath(runId, "browser-profile");
+
 /** Rejects anything that could escape RUNS_DIR — run ids arrive from the URL. */
 export function isValidRunId(id: string): boolean {
   return /^run_[a-z0-9]{6,32}$/.test(id);

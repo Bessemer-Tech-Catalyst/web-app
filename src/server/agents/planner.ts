@@ -82,7 +82,7 @@ export async function plan(ctx: AgentContext, req: PlanRequest): Promise<Scenari
     }),
   );
 
-  const scenarios = capped(ctx, toScenarios(out), ctx.input.options.maxScenarios);
+  const scenarios = capped(ctx, toScenarios(out), scenarioBudget(ctx, req.attempt));
 
   const path = await writeArtifact(
     ctx.runId,
@@ -102,11 +102,31 @@ export async function plan(ctx: AgentContext, req: PlanRequest): Promise<Scenari
   return scenarios;
 }
 
+/**
+ * How many scenarios this attempt may produce.
+ *
+ * The first pass deliberately gets less than the run's cap. It used to get all of it,
+ * and the Planner did what it was told: it filled the budget, the Critic then named the
+ * gaps, and the revision arrived with zero free slots and no way to close a gap except by
+ * deleting coverage — which the Critic scores as a fresh gap. The loop could not converge.
+ *
+ * Observed directly: the same target capped at 8 stalled at 62 → 70 across a re-plan,
+ * while capped at 10 it reached 82 and passed. The difference was headroom, not the model.
+ *
+ * So the cap the user set stays absolute, and the room to close gaps is carved out of the
+ * first pass instead of added to the last one.
+ */
+function scenarioBudget(ctx: AgentContext, attempt: number): number {
+  const max = ctx.input.options.maxScenarios;
+  return attempt === 1 ? Math.max(1, Math.ceil(max * 0.75)) : max;
+}
+
 async function buildInput(ctx: AgentContext, req: PlanRequest): Promise<string> {
-  const { url, intent, prd, options } = ctx.input;
+  const { url, intent, prd } = ctx.input;
+  const budget = scenarioBudget(ctx, req.attempt);
   const lines = [
     `Target: ${url}`,
-    `Budget: at most ${options.maxScenarios} scenarios. Spend them on impact, not breadth for its own sake.`,
+    `Budget: at most ${budget} scenarios. Spend them on impact, not breadth for its own sake.`,
   ];
 
   if (intent) {
@@ -133,9 +153,9 @@ async function buildInput(ctx: AgentContext, req: PlanRequest): Promise<string> 
     lines.push(
       "",
       `This is revision ${req.attempt}. Your previous plan is below. Keep the scenarios that stand, keep their ids, and close the directives that follow.`,
-      options.maxScenarios - req.previous.length > 0
-        ? `You have ${options.maxScenarios - req.previous.length} unused scenario slot(s). Beyond that, close directives by widening an existing scenario.`
-        : `The budget is already full at ${req.previous.length} of ${options.maxScenarios} scenarios. There are no free slots, so directives must be closed by widening existing scenarios — not by deleting coverage to make room. Re-read the rule about this in your instructions before revising.`,
+      budget - req.previous.length > 0
+        ? `You have ${budget - req.previous.length} unused scenario slot(s). Beyond that, close directives by widening an existing scenario.`
+        : `The budget is already full at ${req.previous.length} of ${budget} scenarios. There are no free slots, so directives must be closed by widening existing scenarios — not by deleting coverage to make room. Re-read the rule about this in your instructions before revising.`,
       "---",
       JSON.stringify(req.previous, null, 2),
       "---",
