@@ -1,4 +1,4 @@
-# Crucible — Implementation Plan (working doc)
+# The Odyssey — Implementation Plan (working doc)
 
 > Internal engineering plan. The human-facing summary lives in [`../PLAN.md`](../PLAN.md).
 > Target: Bessemer Tech Catalyst — AI/ML Track — *Autonomous Test Orchestration Agent*.
@@ -42,11 +42,13 @@ agent chatter), Playwright's file contract (not a bespoke format), in-process du
 
 ## 1. Name
 
-**Crucible.** A Bessemer converter is a crucible — you blast air through molten iron and the
-impurities burn off, leaving steel. That is exactly what this does to a web app, and it is named
-after the process the venue's namesake invented. Tagline: **"Put your app in the crucible."**
+**The Odyssey.** A long, self-directed journey across unknown territory — which is what the agent
+does to an application it has never seen. This is the name in the code: the run workspace is
+`.odyssey/`, the environment variables are `ODYSSEY_*`, and the UI and app icon agree.
 
-Backups if it clashes: **Argus** (hundred-eyed watchman), **QAtalyst**, **Testudo**.
+> **Superseded:** this document originally specified **Crucible** (a Bessemer converter *is* a
+> crucible — air blasted through molten iron until the impurities burn off). The rename landed in
+> `336e829`. Noted so the metaphor is not lost for the deck, and so nobody re-opens the decision.
 
 ---
 
@@ -267,6 +269,11 @@ Available ids at time of pinning: `gpt-6-astra` (strongest), `gpt-5.6-sol`, `gpt
 `gpt-5.6-luna` (cheapest). `models.ts` carries each one's published per-token price, because a
 pinned id with a stale price silently lies to the budget guard.
 
+> **Checked against the live account** during Phase 3 verification: `gpt-5.6-luna`, `-sol` and
+> `-terra` all exist and are reachable with our key. **`gpt-6-astra` is not on this account** —
+> it stays in the price table but setting `ODYSSEY_MODEL=gpt-6-astra` would 404. Before the demo,
+> confirm the tier you intend to run on with `GET /v1/models` rather than from this table.
+
 ---
 
 ## 5. Event model (the UI/orchestrator contract)
@@ -310,8 +317,8 @@ most of the *"how clearly does the team present the agent's decisions"* 15%.
 | **0** ✅ | Research + this plan + `PLAN.md` | done |
 | **1** ✅ | **UI shell.** Next.js scaffold, design system, `types.ts`, launcher page, mission-control page, report page, mock event emitter driving the whole thing | `pnpm dev` → enter a URL → watch a full fake pipeline stream, end to end, looking real |
 | **2** ✅ | Orchestrator FSM + real SSE + run store + workspace scaffolder. Agents still deterministic stubs | A real run row persists; UI streams from `events.ndjson`, not mocks; crash/reload resumes |
-| **3** ◀ *now* | Recon + Planner (`@openai/agents` + Playwright MCP) + Coverage Critic + replan loop | Real `specs/*.md` from a real URL; a real critic verdict; a visible replan — **built, not yet exercised against a live key** |
-| **4** | Generator w/ live selector validation + executor (`playwright test --reporter=json`) + shard parallelism | Real green tests on the demo target |
+| **3** ✅ | Recon + Planner (`@openai/agents` + Playwright MCP) + Coverage Critic + replan loop | **Met against a live app.** Recon signed in unaided and crawled 11 authenticated routes; the Critic scored 62, named 7 gaps, and the revision passed at 82. See §10. |
+| **4** ◀ *now* | Generator w/ live selector validation + executor (`playwright test --reporter=json`) + shard parallelism | Real green tests on the demo target |
 | **5** | Triage/classifier + Healer + assertion-integrity guard + bounded re-execute | A deliberately broken selector gets healed; a deliberately broken app gets filed as a bug, *not* healed |
 | **6** | Report synthesis, PRD gap analysis, risk ledger, artifact viewer (trace/video/screenshot) | The report answers all six must-have bullets |
 | **7** | Replay mode, demo script, README, architecture diagram, deck, video | Rehearsed 4-minute demo that cannot fail |
@@ -385,3 +392,103 @@ Accessibility + responsive from the start; judges will watch on a projector at o
       per-flow isolation). Start with `--shard`, `fullyParallel: true`.
 - [ ] PRD ingestion: PDF parsing needed, or paste-as-markdown only for the demo? Start with paste
       + `.md`/`.txt` upload; add PDF only if time remains.
+
+---
+
+## 10. Phase 3 verification — what a live run actually showed
+
+Phase 3 was marked done in §6 while it had never been executed against a live key. It was then
+run against a real authenticated SaaS target (`app.docxion.com`, credentialed) on a real model.
+This section is the record, because "the code exists" and "a run produced it" are different
+claims and this project had been conflating them.
+
+### It works
+
+| | Result |
+|---|---|
+| Recon | Found the login form unaided, signed in, entered a workspace, crawled **11 routes** breadth-first, `authenticated: true`. ~180s. |
+| Planner | 6–8 scenarios from Recon's map. |
+| Critic | **62 → 82, verdict `pass`** across one re-plan. Also observed 66 → 77, and 68 → 72 (below threshold, proceeded on spent allowance). |
+| Orchestrator | Coverage gate, budget guard, redaction, event log, resume — all behaved. No human between stages. |
+| Cost | ≈**$0.06** per full run at the `luna` tier. |
+
+The re-plan loop is the product thesis and it holds up on a target nobody had seen before.
+
+### Four defects it exposed — all fixed, merged in `207e7c2`
+
+1. **Headed browsing was a default, not a guarantee.** `headless` was a field on `RunOptions` and
+   the API parser accepted it from any request body. Now an invariant in `server/browser-mode.ts`
+   with one process-wide escape hatch (`ODYSSEY_HEADLESS`) for machines with no display. The
+   generated `playwright.config.ts` is headed too, which forces `workers: 1` — a watched suite and
+   a parallel suite are in direct conflict, and watching won.
+
+2. **The auth hand-off did not exist.** `playwright-mcp.ts` claimed Recon's session reached the
+   Planner as `results/state.json`. Four links were missing: the seed spec never logged in, nothing
+   executed it, the file was absent from every workspace on disk, and the Planner's browser was
+   never pointed at it. Nothing *failed*, because the Planner plans from Recon's map and never
+   opens a browser — but the Generator cannot do that, and would have quarantined the entire Phase
+   4 suite. Fixed with a shared per-run profile (`--user-data-dir`) replacing `--isolated`;
+   `--storage-state` only *loads* state and cannot do this job. Verified by reading
+   `access_token` / `refresh_token` out of the profile on disk after Recon.
+
+3. **There was no Playwright test runner.** `@playwright/test` and `playwright` were both
+   unresolvable — transitive deps of `@playwright/mcp` that pnpm's strict layout hides. The trap:
+   `npx playwright --version` answered anyway, `1.62.0`, from `/opt/miniconda3/bin/playwright`. An
+   executor shelling out to `npx playwright test` would have worked on one machine and failed on
+   every other. Now a pinned devDependency matching MCP's version, browser installed, headed launch
+   verified. **Phase 4's executor must invoke `node_modules/.bin/playwright`, never bare `npx`.**
+
+4. **The run displayed numbers nobody measured.** The cost meter read $1.26 of which $1.20 was
+   fabricated by stubs calling `ctx.spend` with hardcoded figures — 95% fiction, and the budget
+   guard was gating on it. The report called an empty suite *"every executed test is green"*. The
+   execute stage narrated a sharding rationale citing evidence nothing collects. The bug ledger
+   preferred a hand-written record out of `fixtures.ts` whenever a `testId` matched.
+
+Plus: the scenario budget made the Critic **structurally unable to pass**. The Planner filled the
+cap on pass 1, so a revision had no free slot and could close a gap only by deleting coverage —
+which the Critic scores as a fresh gap. First pass now takes 75% of the cap; the user's cap stays
+absolute.
+
+---
+
+## 11. Open items for Phase 4
+
+### Blocking
+
+- [ ] **`playwright test` has no session.** It cannot use a Chrome `--user-data-dir` and needs its
+      own `storageState` file. Recommended: dump it from the shared profile after Recon closes
+      (`launchPersistentContext` → `storageState({path})`), which reuses the mechanism already
+      proven. The alternative — the Generator reproducing the login as Playwright code — is more
+      agentic and has more ways to fail live.
+      Note the target app authenticates via **localStorage, not cookies**; `storageState` captures
+      both, but a cookies-only assumption would silently produce a logged-out suite.
+- [ ] **`GENERATOR_TOOLS` allowlist.** `createPlaywrightServer` takes `agent: "recon" | "planner"`
+      and needs a third. Keep the allowlist positive — `browser_evaluate` and
+      `browser_run_code_unsafe` stay out for the Generator too.
+- [ ] Recon no longer writes `tests/seed.spec.ts` (the one it wrote never logged in). Whatever
+      produces the real one is Phase 4's job.
+
+### Credibility — small, and a judge could catch any of them
+
+- [ ] **The confidence badges are fake.** Every `decision` renders a percentage and **11 of the 12
+      are hardcoded literals**. Only the triage verdict computes one, as `Math.min` of the
+      classifier's per-failure confidences. The badge is on the panel §5 calls the hero of the 15%
+      UX score, so *"what does 96% mean?"* is a likely question with no answer today.
+      **Recommended: render the badge only where something computed it.**
+- [ ] **A zero-test run still reports `succeeded`.** The Decision Log says so plainly now; the
+      status field does not. Changing it touches the run list.
+- [ ] Redaction runs *after* truncation on tool summaries, so a secret cut mid-string can slip past
+      `redact()`, which matches whole values. Redact first, then truncate.
+
+### Tuning
+
+- [ ] **`maxReplans: 1` is now the binding constraint**, not the scenario cap. First-pass scores
+      land 62–68 and revisions 72–82, so one re-plan is a coin flip on whether the demo shows an
+      accepted plan or a spent allowance. **Run the demo at `maxReplans: 2`.**
+
+### Not started, and not in any phase
+
+- [ ] **The demo target with the feature-flagged deliberate bug.** The only way to trigger
+      `APP_DEFECT` on command, which is the strongest moment in the demo. Needed the moment the
+      Healer is real in Phase 5. §7 has called it non-negotiable since Phase 0 and it still has no
+      phase, no owner and no line in the table above — which is how it will fail to exist.

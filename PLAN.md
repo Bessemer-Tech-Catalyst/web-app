@@ -1,4 +1,4 @@
-# Crucible — The Plan (read this one)
+# The Odyssey — The Plan (read this one)
 
 *Bessemer Tech Catalyst · AI/ML Track · Autonomous Test Orchestration Agent*
 
@@ -6,16 +6,19 @@
 
 ## The name
 
-# 🔥 Crucible
+# 🧭 The Odyssey
 
-A **Bessemer converter is a crucible** — you blast air through molten iron and the impurities
-burn off, leaving steel. That's exactly what this tool does to a web app, and it's named after
-the process the event's namesake invented. Judges from Bessemer will get it in half a second.
+The product is **The Odyssey** — a long, self-directed journey across unknown territory,
+which is what the agent does to an application it has never seen.
 
-**Tagline:** *Put your app in the crucible.*
+That is the name in the code, and this document is the last place still using the old one.
+The workspace is `.odyssey/`, the environment variables are `ODYSSEY_*`, the UI and the app
+icon say Odyssey. Anything that says otherwise is stale.
 
-Backups if you don't like it: **Argus** (the hundred-eyed watchman — all-seeing coverage),
-**QAtalyst**, **Testudo**.
+> **Superseded:** this plan originally pitched **Crucible** — a Bessemer converter *is* a
+> crucible, air blasted through molten iron until the impurities burn off. The metaphor was
+> good and the rename happened anyway (commit `336e829`). Recorded here so nobody
+> re-litigates it, and because the crucible line is still a decent one for the deck.
 
 ---
 
@@ -44,7 +47,7 @@ all look the same. We spend our time on the *decisions*, and we make those decis
 
 ---
 
-## What Crucible actually does
+## What The Odyssey actually does
 
 You paste a URL. Optionally a PRD and a sentence like *"focus on checkout and auth."*
 Then it runs itself:
@@ -197,12 +200,15 @@ so it's a swap, not a rewrite.
 |---|---|---|
 | 0 | Research + this plan | ✅ done |
 | 1 | The UI — both screens, fully working, driven by a realistic fake run | ✅ done |
-| **2** | **The orchestrator state machine + real live streaming + saved runs** | ✅ done |
-| **3** | Recon + Planner + the Coverage Critic (real browser, real model) | ◀ **next** |
-| 4 | Generator with live selector proving + parallel test execution | |
+| 2 | The orchestrator state machine + real live streaming + saved runs | ✅ done |
+| 3 | Recon + Planner + the Coverage Critic (real browser, real model) | ✅ **done and verified against a live app** |
+| **4** | Generator with live selector proving + parallel test execution | ◀ **next** |
 | 5 | Triage + Healer + the assertion guard | |
 | 6 | Final report, PRD gap analysis, risk ledger, screenshot/video viewer | |
 | 7 | Demo rehearsal, README, architecture diagram, deck, video | |
+
+Phase 3 was marked done once before it had ever run. It had not, and running it found four
+defects (below). "Done" now means *a real run produced it*, not *the code exists*.
 
 Phase 1 is deliberately built against the *real* data shapes with fake data flowing through them.
 So when phase 2 plugs in the real engine, **the UI doesn't change at all.** No rework.
@@ -225,13 +231,73 @@ So when phase 2 plugs in the real engine, **the UI doesn't change at all.** No r
 
 ## Where we are
 
-Phases 1 and 2 are done. The UI is built, and it is no longer driven by a fake: the server creates
-a run, scaffolds its workspace, drives a real state machine over it, writes an append-only event
-log, and streams that log to the browser. Reload the page mid-run and it resumes exactly where it
-was. Cancel it and it stops. The judgment lives in the orchestrator — the coverage gate, the
-bug-vs-script call, the assertion guard, the budget ceiling — and the three sub-agents sit behind
-an interface with deterministic stand-ins, so Phase 3 swaps in the real ones one at a time without
-touching anything above them.
+**Phases 1–3 are done, and Phase 3 has been run against a live application** — not a fixture, not
+a stub: a real authenticated SaaS app, with a real key, in a real browser.
+
+What that run proved:
+
+- Recon took a bare URL and credentials, **found the login form, signed in unaided**, entered a
+  workspace and crawled **11 routes** breadth-first — `/appointments`, `/patients`,
+  `/ai-assistant`, `/messages`, `/analytics`, `/support`, `/doctors`, `/staff`. No scripting.
+- The Planner produced a plan, and the **Coverage Critic scored it 62/100, named seven gaps, sent
+  it back, and the revision came back at 82 and passed.** That loop is the product thesis and it
+  works on a real target.
+- The budget guard, the redaction pass, the event log and the resume path all behaved.
+- End to end, no human between stages, ≈$0.06 of tokens.
+
+Three of the ten agent methods are real (`recon`, `plan`, `critique`). The rest are still
+deterministic stand-ins behind the `Agents` interface, which is what Phase 4 starts replacing.
+
+### What that run also found — all fixed, merged in `207e7c2`
+
+| | Defect | Why it mattered |
+|---|---|---|
+| 1 | A headed browser was a *default* any request body could switch off | Watching the browser is half of what makes a run legible |
+| 2 | The auth hand-off was documented but **absent at all four of its links** | The Phase 4 Generator would have started logged out and quarantined every test |
+| 3 | **No Playwright test runner in the project** — `npx playwright` was silently resolving to a global conda binary | Would have worked on one machine and failed everywhere else |
+| 4 | The cost meter was **95% fabricated** ($1.26 shown, $0.06 real); an empty suite reported *"every executed test is green"* | Numbers on the surfaces a judge trusts most |
+
+Also fixed: the scenario budget made the Critic *structurally* unable to pass — the Planner filled
+the cap on the first pass, so a revision had no free slot and could only close a gap by deleting
+coverage, which scores as a fresh gap. The first pass now takes 75% of the cap.
 
 The detailed engineering version of this plan is in
 [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
+
+---
+
+## Open items — read this before starting Phase 4
+
+Found during verification, deliberately not fixed yet. Nothing here is written down anywhere else.
+
+**Blocking Phase 4**
+
+- **`playwright test` has no session.** The MCP agents share a Chrome profile, but the generated
+  suite runs under `playwright test`, which cannot use a `--user-data-dir` and needs its own
+  `storageState` file. Two options: dump it from the shared profile after Recon (~10 lines, reuses
+  what already provably works), or have the Generator reproduce the login as Playwright code (more
+  agentic, more ways to fail on stage). **Recommend the first.**
+- **`GENERATOR_TOOLS` does not exist.** `createPlaywrightServer` takes `agent: "recon" | "planner"`
+  and needs a third allowlist. The target app authenticates via **localStorage, not cookies** —
+  which the profile handles, and which `storageState` also captures.
+
+**Credibility — small, and a judge could catch any of them**
+
+- **The confidence badges are fake.** Every decision renders a percentage; **11 of the 12 are
+  hardcoded literals** (`0.96`, `0.90`, `0.72`…). Only the triage verdict computes one, from the
+  classifier's own per-failure confidence. Recommended fix: show the badge *only* where something
+  computed it. That turns "what does 96% mean?" into a talking point instead of a hole.
+- **A run producing zero tests still reports `succeeded`.** The Decision Log now says so plainly,
+  but the status field does not. Changing it touches the run list.
+
+**Tuning**
+
+- **`maxReplans: 1` is now the binding constraint**, not the scenario cap. The Critic scores
+  62–68 on the first pass and 72–82 on the second; one re-plan is a coin flip on whether the demo
+  shows *"accepted at 82"* or *"proceeded, allowance spent"*. **Use `maxReplans: 2` for the demo.**
+
+**Not started, and not in any phase**
+
+- **The demo target app with the feature-flagged deliberate bug.** It is the only way to trigger
+  `APP_DEFECT` on command, which is the strongest single moment in the demo. It is needed the
+  moment the Healer is real in Phase 5, and unscheduled work does not get built.
