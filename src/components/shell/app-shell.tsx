@@ -106,10 +106,7 @@ function SidebarBody({
           collapsed ? "justify-center px-2" : "justify-between px-4",
         )}
       >
-        <Wordmark
-          subtitle={collapsed ? undefined : "Test orchestration"}
-          compact={collapsed}
-        />
+        <Wordmark compact={collapsed} />
         {onToggle && !collapsed ? (
           <button
             onClick={onToggle}
@@ -154,7 +151,7 @@ function SidebarBody({
             <Link
               href="/new"
               title="New run"
-              className="flex size-9 items-center justify-center rounded-lg bg-ember-500 text-base-950 transition hover:bg-ember-400"
+              className="flex size-9 items-center justify-center rounded-md bg-ember-500 text-base-950 transition hover:bg-ember-400"
             >
               <IconRun className="size-4" />
             </Link>
@@ -174,7 +171,7 @@ function SidebarBody({
             <Link
               href="/new"
               onClick={onNavigate}
-              className="flex items-center justify-center gap-2 rounded-lg bg-ember-500 px-3 py-2 text-[13px] font-semibold text-base-950 transition hover:bg-ember-400"
+              className="flex items-center justify-center gap-2 rounded-md bg-ember-500 px-3 py-2 text-[13px] font-semibold text-base-950 transition hover:bg-ember-400"
             >
               <IconRun className="size-3.5" />
               New run

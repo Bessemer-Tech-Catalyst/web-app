@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Card, CardHeader, Empty } from "@/components/ui/primitives";
+import { Section, SectionHeader, Empty } from "@/components/ui/primitives";
 import { cn } from "@/lib/format";
 import type { AgentName, OrchestratorEvent } from "@/lib/types";
 
@@ -28,8 +28,8 @@ export function ActivityFeed({ activity }: { activity: ActivityEvent[] }) {
   }, [activity.length]);
 
   return (
-    <Card className="flex min-h-0 flex-col">
-      <CardHeader
+    <Section flush className="flex min-h-0 flex-col">
+      <SectionHeader
         title="Agent activity"
         subtitle="Raw sub-agent tool calls and reasoning"
       />
@@ -70,6 +70,6 @@ export function ActivityFeed({ activity }: { activity: ActivityEvent[] }) {
         )}
         <div ref={endRef} />
       </div>
-    </Card>
+    </Section>
   );
 }

@@ -1,12 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { Badge, Card, Dot } from "@/components/ui/primitives";
+import { Badge, Section, Dot } from "@/components/ui/primitives";
 import { DEFAULT_RUN_OPTIONS, type RunInput, type RunOptions } from "@/lib/types";
 import { cn } from "@/lib/format";
 import { newRunId, saveDraft } from "@/lib/run-draft";
+
+// three.js is dead weight until the hero paints — and it needs a DOM, so no SSR pass.
+const HeroCanvas = dynamic(
+  () => import("./hero-canvas").then((m) => m.HeroCanvas),
+  { ssr: false },
+);
 
 const PRESETS = [
   { label: "ShopLite", url: "https://shoplite.demo", note: "our demo target — auth, cart, checkout, admin" },
@@ -63,10 +70,11 @@ export function Launcher() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-5 pb-24">
+    <div className="w-full">
       {/* ---- hero ---- */}
-      <div className="relative pt-10 pb-10 text-center sm:pt-16">
+      <div className="relative px-6 pt-32 pb-12 text-center sm:pt-40">
         <div className="grid-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-72" />
+        <HeroCanvas className="hero-webgl pointer-events-none absolute top-0 left-1/2 -z-10 h-[150px] w-[min(1100px,124vw)] -translate-x-1/2 sm:h-[190px]" />
         <Badge tone="ember" className="mx-auto">
           <Dot tone="ember" /> Autonomous test orchestration
         </Badge>
@@ -87,8 +95,8 @@ export function Launcher() {
 
       {/* ---- launcher form ---- */}
       <form onSubmit={launch}>
-        <Card className="overflow-hidden shadow-2xl shadow-black/40">
-          <div className="border-b border-base-800 p-4 sm:p-5">
+        <Section className="border-t border-base-850">
+          <div className="border-b border-base-850 px-6 py-5">
             <label
               htmlFor="target-url"
               className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-base-500"
@@ -113,14 +121,14 @@ export function Launcher() {
                   aria-invalid={!!error}
                   aria-describedby={error ? "url-error" : undefined}
                   className={cn(
-                    "w-full rounded-lg border bg-base-950/80 py-3 pl-9 pr-3 font-mono text-sm text-base-100 placeholder:text-base-600",
+                    "w-full rounded-md border bg-base-950/80 py-3 pl-9 pr-3 font-mono text-sm text-base-100 placeholder:text-base-600",
                     error ? "border-danger-500/60" : "border-base-800",
                   )}
                 />
               </div>
               <button
                 type="submit"
-                className="group inline-flex items-center justify-center gap-2 rounded-lg bg-ember-500 px-6 py-3 text-sm font-semibold text-base-950 transition hover:bg-ember-400 active:scale-[0.99]"
+                className="group inline-flex items-center justify-center gap-2 rounded-md bg-ember-500 px-6 py-3 text-sm font-semibold text-base-950 transition hover:bg-ember-400 active:scale-[0.99]"
               >
                 Run the pipeline
                 <span className="transition-transform group-hover:translate-x-0.5">→</span>
@@ -152,8 +160,8 @@ export function Launcher() {
           </div>
 
           {/* ---- optional inputs ---- */}
-          <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
-            <div>
+          <div className="grid divide-y divide-base-850 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+            <div className="px-6 py-5">
               <label
                 htmlFor="intent"
                 className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-base-500"
@@ -166,14 +174,14 @@ export function Launcher() {
                 onChange={(e) => setIntent(e.target.value)}
                 rows={3}
                 placeholder="focus on checkout and authentication flows"
-                className="w-full resize-none rounded-lg border border-base-800 bg-base-950/80 px-3 py-2.5 text-sm text-base-100 placeholder:text-base-600"
+                className="w-full resize-none rounded-md border border-base-800 bg-base-950/80 px-3 py-2.5 text-sm text-base-100 placeholder:text-base-600"
               />
               <p className="mt-1.5 text-xs text-base-600">
                 Plain English. It steers the planner's scope and priorities.
               </p>
             </div>
 
-            <div>
+            <div className="px-6 py-5">
               <label className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-base-500">
                 Product requirements <Badge>optional</Badge>
               </label>
@@ -188,7 +196,7 @@ export function Launcher() {
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 className={cn(
-                  "flex h-[86px] w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed text-sm transition",
+                  "flex h-[86px] w-full flex-col items-center justify-center gap-1 rounded-md border border-dashed text-sm transition",
                   prd
                     ? "border-ok-500/40 bg-ok-500/6 text-ok-400"
                     : "border-base-800 bg-base-950/50 text-base-500 hover:border-base-700 hover:text-base-300",
@@ -215,12 +223,12 @@ export function Launcher() {
           </div>
 
           {/* ---- advanced ---- */}
-          <div className="border-t border-base-800">
+          <div className="border-t border-base-850">
             <button
               type="button"
               onClick={() => setAdvanced((v) => !v)}
               aria-expanded={advanced}
-              className="flex w-full items-center justify-between px-4 py-3 text-xs text-base-500 transition hover:text-base-300 sm:px-5"
+              className="flex w-full items-center justify-between px-6 py-3.5 text-xs text-base-500 transition hover:text-base-300 sm:px-5"
             >
               <span className="flex items-center gap-2">
                 <span
@@ -240,8 +248,8 @@ export function Launcher() {
             </button>
 
             {advanced ? (
-              <div className="animate-stream-in grid gap-4 border-t border-base-800 p-4 sm:grid-cols-2 sm:p-5">
-                <div className="space-y-3">
+              <div className="animate-stream-in grid divide-y divide-base-850 border-t border-base-850 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+                <div className="space-y-3 px-6 py-5">
                   <p className="text-[11px] font-medium uppercase tracking-wider text-base-500">
                     Sign-in (so recon can get past the login wall)
                   </p>
@@ -266,7 +274,7 @@ export function Launcher() {
                   </p>
                 </div>
 
-                <div className="space-y-3.5">
+                <div className="space-y-3.5 px-6 py-5">
                   <Slider
                     label="Max scenarios"
                     value={options.maxScenarios}
@@ -300,11 +308,11 @@ export function Launcher() {
               </div>
             ) : null}
           </div>
-        </Card>
+        </Section>
       </form>
 
       {/* ---- what makes it different ---- */}
-      <div className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid border-t border-base-850 sm:grid-cols-2 lg:grid-cols-4">
         {[
           {
             n: "01",
@@ -327,15 +335,15 @@ export function Launcher() {
             d: "Untested surfaces ranked by risk — the coverage nobody else shows you.",
           },
         ].map((f) => (
-          <Card key={f.n} className="p-4">
+          <Section key={f.n} className="px-6 py-6 sm:border-r sm:border-base-850">
             <div className="font-mono text-[11px] text-ember-500">{f.n}</div>
             <h3 className="mt-2 text-sm font-semibold text-base-100">{f.t}</h3>
-            <p className="mt-1.5 text-xs leading-relaxed text-base-500">{f.d}</p>
-          </Card>
+            <p className="mt-2 text-xs leading-relaxed text-base-500">{f.d}</p>
+          </Section>
         ))}
       </div>
 
-      <p className="mt-10 text-center text-xs text-base-600">
+      <p className="px-6 py-8 text-center text-xs text-base-600">
         Looking for something you already ran?{" "}
         <Link href="/runs" className="text-ember-400 hover:text-ember-300">
           Past runs →

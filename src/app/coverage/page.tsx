@@ -1,5 +1,5 @@
 import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { Badge, Card, CardHeader, Meter, Stat, type Tone } from "@/components/ui/primitives";
+import { Badge, Section, SectionHeader, Meter, Stat, type Tone } from "@/components/ui/primitives";
 import { COVERAGE, TARGETS, targetName } from "@/lib/mock-fleet";
 import type { Priority } from "@/lib/types";
 
@@ -27,8 +27,8 @@ export default function CoveragePage() {
         subtitle="What the pipeline has exercised — and, more usefully, what it never reached."
       />
 
-      <PageBody className="space-y-5">
-        <Card className="grid divide-y divide-base-800 sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+      <PageBody>
+        <Section className="grid divide-y divide-base-850 sm:grid-cols-4 sm:divide-x sm:divide-y-0">
           <Stat label="Surfaces mapped" value={COVERAGE.length} hint="Across all targets" />
           <Stat label="Scenarios" value={totalScenarios} hint="Generated and executed" />
           <Stat
@@ -43,18 +43,18 @@ export default function CoveragePage() {
             tone={untested.length ? "danger" : "ok"}
             hint="Surfaces with zero scenarios"
           />
-        </Card>
+        </Section>
 
-        <Card>
-          <CardHeader
+        <Section>
+          <SectionHeader
             title="By surface"
             subtitle="Coverage depth, pass rate and the residual risk of what's missing"
           />
-          <div className="divide-y divide-base-800">
+          <div className="divide-y divide-base-850">
             {[...COVERAGE]
               .sort((a, b) => a.scenarios - b.scenarios)
               .map((c) => (
-                <div key={c.id} className="px-4 py-3.5">
+                <div key={c.id} className="px-6 py-4">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="text-[13px] text-base-100">{c.surface}</span>
@@ -73,7 +73,7 @@ export default function CoveragePage() {
                     </div>
                   </div>
                   <Meter
-                    className="mt-2"
+                    className="mt-2.5 max-w-2xl"
                     value={c.scenarios ? c.passRate * 100 : 3}
                     tone={c.scenarios ? RISK_TONE[c.risk] : "danger"}
                     label={`${c.surface} pass rate`}
@@ -82,20 +82,21 @@ export default function CoveragePage() {
                 </div>
               ))}
           </div>
-        </Card>
+        </Section>
 
-        <Card>
-          <CardHeader
+        <Section>
+          <SectionHeader
             title="Per target"
             subtitle="Latest critic score and its direction since the previous run"
           />
-          <div className="divide-y divide-base-800">
+          <div className="divide-y divide-base-850">
             {TARGETS.map((t) => (
-              <div key={t.id} className="flex items-center gap-4 px-4 py-3">
+              <div key={t.id} className="flex items-center gap-4 px-6 py-3.5">
                 <span className="w-40 shrink-0 truncate text-[13px] text-base-200">
                   {t.name}
                 </span>
                 <Meter
+                  className="max-w-xl"
                   value={t.coverageScore}
                   tone={t.coverageScore >= 85 ? "ok" : t.coverageScore >= 70 ? "warn" : "danger"}
                   label={`${t.name} coverage score`}
@@ -118,7 +119,7 @@ export default function CoveragePage() {
               </div>
             ))}
           </div>
-        </Card>
+        </Section>
       </PageBody>
     </>
   );

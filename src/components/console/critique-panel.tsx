@@ -1,4 +1,4 @@
-import { Badge, Card, CardHeader, Empty, Meter } from "@/components/ui/primitives";
+import { Badge, Section, SectionHeader, Empty, Meter } from "@/components/ui/primitives";
 import { cn } from "@/lib/format";
 import type { Critique, CritiqueDimension } from "@/lib/types";
 
@@ -15,8 +15,8 @@ export function CritiquePanel({ critiques }: { critiques: Critique[] }) {
   const latest = critiques.at(-1);
 
   return (
-    <Card className="flex min-h-0 flex-col">
-      <CardHeader
+    <Section flush className="flex min-h-0 flex-col">
+      <SectionHeader
         title="Coverage critic"
         subtitle="The gate between planning and generation"
         right={
@@ -30,7 +30,7 @@ export function CritiquePanel({ critiques }: { critiques: Critique[] }) {
       {!latest ? (
         <Empty>The plan has not been graded yet</Empty>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
           <div className="flex items-end gap-3">
             <div className="flex items-baseline gap-1.5">
               <span
@@ -95,7 +95,7 @@ export function CritiquePanel({ critiques }: { critiques: Critique[] }) {
                 {latest.gaps.map((g) => (
                   <li
                     key={g.id}
-                    className="rounded-md border border-base-850 bg-base-950/50 px-2.5 py-2"
+                    className="rounded-md bg-base-900 px-2.5 py-2"
                   >
                     <div className="flex items-start gap-2">
                       <Badge
@@ -121,6 +121,6 @@ export function CritiquePanel({ critiques }: { critiques: Critique[] }) {
           )}
         </div>
       )}
-    </Card>
+    </Section>
   );
 }

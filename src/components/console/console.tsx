@@ -7,7 +7,7 @@ import { CritiquePanel } from "@/components/console/critique-panel";
 import { DecisionLog } from "@/components/console/decision-log";
 import { StagePipeline } from "@/components/console/stage-pipeline";
 import { TestBoard } from "@/components/console/test-board";
-import { Badge, Card, CardHeader, Dot, Empty } from "@/components/ui/primitives";
+import { Badge, Section, SectionHeader, Dot, Empty } from "@/components/ui/primitives";
 import { useRunStream, type Speed } from "@/hooks/use-run-stream";
 import { cn, formatDuration, formatTokens, formatUsd, hostOf } from "@/lib/format";
 import { loadDraft } from "@/lib/run-draft";
@@ -51,7 +51,7 @@ export function RunConsole({ runId }: { runId: string }) {
     <main className="flex h-full flex-col overflow-hidden">
       {/* ---------- top bar ---------- */}
       <header className="shrink-0 border-b border-base-850 bg-base-950/80 backdrop-blur">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3.5">
           <Link
             href="/runs"
             className="rounded-md border border-base-800 px-2.5 py-1 text-xs text-base-400 transition hover:border-base-700 hover:text-base-100"
@@ -59,7 +59,7 @@ export function RunConsole({ runId }: { runId: string }) {
             ← Runs
           </Link>
 
-          <div className="flex min-w-0 items-center gap-2 border-l border-base-800 pl-4">
+          <div className="flex min-w-0 items-center gap-2 border-l border-base-850 pl-4">
             <Dot tone={running ? "ember" : state.report ? "ok" : "neutral"} pulse={running} />
             <span className="truncate font-mono text-xs text-base-300">
               {hostOf(input.url)}
@@ -80,7 +80,7 @@ export function RunConsole({ runId }: { runId: string }) {
               value={`${formatTokens(state.tokensIn)}/${formatTokens(state.tokensOut)}`}
             />
 
-            <div className="flex items-center gap-0.5 rounded-lg border border-base-800 bg-base-900 p-0.5">
+            <div className="flex items-center gap-0.5 rounded-md border border-base-800 bg-base-900 p-0.5">
               {([1, 2, 4] as Speed[]).map((s) => (
                 <button
                   key={s}
@@ -109,7 +109,7 @@ export function RunConsole({ runId }: { runId: string }) {
             {state.report ? (
               <Link
                 href={`/runs/${runId}/report`}
-                className="rounded-lg bg-ember-500 px-3.5 py-1.5 text-xs font-semibold text-base-950 transition hover:bg-ember-400"
+                className="rounded-md bg-ember-500 px-3.5 py-1.5 text-xs font-semibold text-base-950 transition hover:bg-ember-400"
               >
                 View report →
               </Link>
@@ -117,22 +117,22 @@ export function RunConsole({ runId }: { runId: string }) {
           </div>
         </div>
 
-        <div className="border-t border-base-850 px-3">
+        <div className="border-t border-base-850">
           <StagePipeline state={state} />
         </div>
       </header>
 
       {/* ---------- body ---------- */}
-      <div className="grid min-h-0 flex-1 gap-3 overflow-hidden p-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <div className="flex min-h-0 flex-col gap-3">
+      <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <div className="flex min-h-0 flex-col border-b border-base-850 lg:border-b-0 lg:border-r">
           <DecisionLog decisions={state.decisions} />
         </div>
 
-        <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+        <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] divide-y divide-base-850">
           <CritiquePanel critiques={state.critiques} />
 
           <div className="flex min-h-0 flex-col">
-            <div className="mb-2 flex shrink-0 gap-1">
+            <div className="flex shrink-0 gap-1 border-b border-base-850 px-4 py-2.5">
               {(
                 [
                   ["suite", `Suite ${state.tests.length ? `(${state.tests.length})` : ""}`],
@@ -173,7 +173,7 @@ export function RunConsole({ runId }: { runId: string }) {
       </div>
 
       {/* ---------- status strip ---------- */}
-      <footer className="flex shrink-0 items-center gap-3 border-t border-base-850 bg-base-950/80 px-4 py-2 text-[11px] text-base-500 backdrop-blur">
+      <footer className="flex shrink-0 items-center gap-3 border-t border-base-850 bg-base-950/80 px-6 py-2.5 text-[11px] text-base-500 backdrop-blur">
         {running && state.currentStage ? (
           <>
             <Dot tone="ember" pulse />
@@ -218,7 +218,7 @@ function Metric({
   warn?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-base-800 bg-base-900 px-2.5 py-1">
+    <div className="rounded-md border border-base-800 bg-base-900 px-2.5 py-1">
       <div className="text-[9px] uppercase tracking-wider text-base-600">{label}</div>
       <div
         className={cn(
@@ -247,8 +247,8 @@ function ArtifactRail({
     patch: "±",
   };
   return (
-    <Card className="flex min-h-0 flex-col">
-      <CardHeader
+    <Section flush className="flex min-h-0 flex-col">
+      <SectionHeader
         title="Artifacts"
         subtitle="Real files on disk — commit them, open them in the Playwright viewer"
       />
@@ -260,11 +260,11 @@ function ArtifactRail({
             {artifacts.map((a) => (
               <li
                 key={a.seq}
-                className="animate-stream-in flex items-center gap-2.5 px-4 py-2"
+                className="animate-stream-in flex items-center gap-2.5 px-6 py-2"
               >
                 <span
                   aria-hidden
-                  className="flex size-5 shrink-0 items-center justify-center rounded border border-base-800 bg-base-850 font-mono text-[10px] text-base-400"
+                  className="flex size-5 shrink-0 items-center justify-center rounded bg-base-850 font-mono text-[10px] text-base-400"
                 >
                   {ICON[a.kind] ?? "·"}
                 </span>
@@ -277,6 +277,6 @@ function ArtifactRail({
           </ul>
         )}
       </div>
-    </Card>
+    </Section>
   );
 }

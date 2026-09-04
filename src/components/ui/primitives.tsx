@@ -4,58 +4,120 @@ import type { Tone } from "@/lib/types";
 
 export type { Tone };
 
-// --- Card -------------------------------------------------------------------
+/**
+ * Surfaces here are sections, not cards: nothing floats, nothing is rounded,
+ * and regions are told apart by a hairline rule rather than by a border plus a
+ * gap plus a tint. Radius is reserved for things you can click or type into.
+ *
+ * The horizontal rhythm is one number — SECTION_X — so a section header, a list
+ * row and a table cell all start on the same vertical line down the page.
+ */
 
-export function Card({
+// --- Section ----------------------------------------------------------------
+
+/** The page's horizontal gutter. Every row and header uses it. */
+export const SECTION_X = "px-6";
+
+export function Section({
   children,
   className,
   as: Tag = "section",
+  flush,
 }: {
   children: ReactNode;
   className?: string;
   as?: "section" | "div" | "article" | "aside";
+  /** Drop the closing rule — for the last section on a page. */
+  flush?: boolean;
 }) {
   return (
-    <Tag
-      className={cn(
-        "rounded-xl border border-base-800 bg-base-900/60 backdrop-blur-sm",
-        className,
-      )}
-    >
+    <Tag className={cn(!flush && "border-b border-base-850", className)}>
       {children}
     </Tag>
   );
 }
 
-export function CardHeader({
+export function SectionHeader({
   title,
   subtitle,
   right,
   className,
+  rule = true,
 }: {
   title: ReactNode;
   subtitle?: ReactNode;
   right?: ReactNode;
   className?: string;
+  /** A rule under the header, for sections whose body is a list or a table. */
+  rule?: boolean;
 }) {
   return (
     <div
       className={cn(
-        "flex items-start justify-between gap-4 border-b border-base-800 px-4 py-3",
+        "flex items-start justify-between gap-4 py-4",
+        SECTION_X,
+        rule && "border-b border-base-850",
         className,
       )}
     >
       <div className="min-w-0">
-        <h2 className="text-sm font-semibold tracking-tight text-base-100">
+        <h2 className="text-[13px] font-semibold tracking-tight text-base-100">
           {title}
         </h2>
         {subtitle ? (
-          <p className="mt-0.5 text-xs leading-relaxed text-base-500">{subtitle}</p>
+          <p className="mt-1 text-xs leading-relaxed text-base-500">{subtitle}</p>
         ) : null}
       </div>
-      {right ? <div className="shrink-0">{right}</div> : null}
+      {right ? <div className="shrink-0 text-xs">{right}</div> : null}
     </div>
   );
+}
+
+/**
+ * Columns told apart by a vertical rule instead of a gap — the row of figures
+ * across the top of a page, or two lists sitting side by side. Stacks into
+ * horizontal rules below the breakpoint.
+ */
+export function SplitGrid({
+  children,
+  className,
+  cols = 2,
+}: {
+  children: ReactNode;
+  className?: string;
+  cols?: 2 | 3 | 4;
+}) {
+  const at: Record<2 | 3 | 4, string> = {
+    2: "sm:grid-cols-2",
+    3: "lg:grid-cols-3",
+    4: "sm:grid-cols-2 lg:grid-cols-4",
+  };
+  return (
+    <div
+      className={cn(
+        "grid divide-y divide-base-850",
+        at[cols],
+        cols === 3
+          ? "lg:divide-x lg:divide-y-0"
+          : "sm:divide-x sm:divide-y-0 lg:divide-x",
+        cols === 4 && "sm:max-lg:divide-y",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** One line in a list section. Keeps every list on the same gutter and height. */
+export function Row({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={cn("py-3.5", SECTION_X, className)}>{children}</div>;
 }
 
 // --- Badge ------------------------------------------------------------------
@@ -163,7 +225,7 @@ export function Meter({
 
 export function Empty({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-24 items-center justify-center px-4 py-8 text-center text-xs text-base-600">
+    <div className="flex min-h-28 items-center justify-center px-6 py-10 text-center text-xs text-base-600">
       {children}
     </div>
   );
@@ -192,14 +254,19 @@ export function Stat({
     violet: "text-violet-500",
   };
   return (
-    <div className="px-4 py-3">
-      <div className="text-[11px] font-medium uppercase tracking-wider text-base-500">
+    <div className={cn("py-5", SECTION_X)}>
+      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-base-500">
         {label}
       </div>
-      <div className={cn("mt-1 text-2xl font-semibold tabular-nums", color[tone])}>
+      <div
+        className={cn(
+          "mt-2 text-[28px] leading-none font-semibold tabular-nums",
+          color[tone],
+        )}
+      >
         {value}
       </div>
-      {hint ? <div className="mt-0.5 text-xs text-base-500">{hint}</div> : null}
+      {hint ? <div className="mt-2 text-xs text-base-600">{hint}</div> : null}
     </div>
   );
 }
@@ -218,10 +285,10 @@ export function Code({
   return (
     <pre
       className={cn(
-        "overflow-x-auto rounded-lg border px-3 py-2 font-mono text-[11px] leading-relaxed",
-        tone === "add" && "border-ok-500/25 bg-ok-500/8 text-ok-400",
-        tone === "remove" && "border-danger-500/25 bg-danger-500/8 text-danger-400",
-        !tone && "border-base-800 bg-base-950/70 text-base-300",
+        "overflow-x-auto rounded-md px-3 py-2.5 font-mono text-[11px] leading-relaxed",
+        tone === "add" && "bg-ok-500/10 text-ok-400",
+        tone === "remove" && "bg-danger-500/10 text-danger-400",
+        !tone && "bg-base-900 text-base-300",
         className,
       )}
     >

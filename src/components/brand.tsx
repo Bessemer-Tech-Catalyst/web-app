@@ -47,31 +47,22 @@ export function OdysseyMark({ className }: { className?: string }) {
 
 export function Wordmark({
   href = "/",
-  subtitle,
   compact,
 }: {
   href?: string;
-  subtitle?: string;
   /** Mark only — used by the collapsed sidebar rail. */
   compact?: boolean;
 }) {
   return (
     <Link
       href={href}
-      className="group flex items-center gap-2.5"
+      className="group flex min-w-0 items-center gap-2"
       aria-label="The Odyssey — home"
     >
-      <OdysseyMark className="size-7 shrink-0 text-base-400 transition-colors group-hover:text-base-100" />
+      <OdysseyMark className="size-5.5 shrink-0 text-base-500 transition-colors group-hover:text-base-200" />
       {compact ? null : (
-        <span className="flex flex-col leading-none">
-          <span className="text-[15px] font-semibold tracking-tight text-base-100">
-            <span className="font-normal text-base-400">The </span>Odyssey
-          </span>
-          {subtitle ? (
-            <span className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-base-500">
-              {subtitle}
-            </span>
-          ) : null}
+        <span className="truncate text-[15px] leading-none font-semibold tracking-tight text-base-100">
+          <span className="font-normal text-base-400">The </span>Odyssey
         </span>
       )}
     </Link>

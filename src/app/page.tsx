@@ -1,6 +1,15 @@
 import Link from "next/link";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { Badge, Card, CardHeader, Dot, Meter, Stat } from "@/components/ui/primitives";
+import {
+  Badge,
+  Dot,
+  Meter,
+  Row,
+  Section,
+  SectionHeader,
+  SplitGrid,
+  Stat,
+} from "@/components/ui/primitives";
 import {
   COVERAGE,
   DEFECTS,
@@ -43,16 +52,17 @@ export default function OverviewPage() {
         actions={
           <Link
             href="/new"
-            className="rounded-lg bg-ember-500 px-3.5 py-2 text-[13px] font-semibold text-base-950 transition hover:bg-ember-400"
+            className="rounded-md bg-ember-500 px-3.5 py-2 text-[13px] font-semibold text-base-950 transition hover:bg-ember-400"
           >
             New run
           </Link>
         }
       />
 
-      <PageBody className="space-y-5">
+      <PageBody>
         {/* ---- headline numbers ---- */}
-        <Card className="grid divide-y divide-base-800 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+        <Section>
+          <SplitGrid cols={4}>
           <Stat label="Runs · 24h" value={RUNS_LAST_24H.length} hint={`${RUN_HISTORY.length} total on record`} />
           <Stat
             label="Avg coverage"
@@ -72,12 +82,13 @@ export default function OverviewPage() {
             tone={openDefects.length ? "danger" : "ok"}
             hint="Classified as app bugs, not script drift"
           />
-        </Card>
+          </SplitGrid>
+        </Section>
 
-        <div className="grid gap-5 lg:grid-cols-3">
+        <Section className="grid lg:grid-cols-3 lg:divide-x lg:divide-base-850">
           {/* ---- recent runs ---- */}
-          <Card className="lg:col-span-2">
-            <CardHeader
+          <div className="lg:col-span-2">
+            <SectionHeader
               title="Recent runs"
               subtitle="Newest first, manual and scheduled together"
               right={
@@ -86,12 +97,12 @@ export default function OverviewPage() {
                 </Link>
               }
             />
-            <div className="divide-y divide-base-800">
+            <div className="divide-y divide-base-850">
               {RUN_HISTORY.slice(0, 5).map((r) => (
                 <Link
                   key={r.id}
                   href={`/runs/${r.id}`}
-                  className="flex items-center gap-3 px-4 py-3 transition hover:bg-base-850/50"
+                  className="flex items-center gap-3 px-6 py-3.5 transition hover:bg-base-900/60"
                 >
                   <Dot tone={STATUS_TONE[r.status]} />
                   <div className="min-w-0 flex-1">
@@ -120,11 +131,11 @@ export default function OverviewPage() {
                 </Link>
               ))}
             </div>
-          </Card>
+          </div>
 
           {/* ---- next scheduled ---- */}
-          <Card>
-            <CardHeader
+          <div className="border-t border-base-850 lg:border-t-0">
+            <SectionHeader
               title="Up next"
               subtitle="Enabled schedules"
               right={
@@ -136,28 +147,28 @@ export default function OverviewPage() {
                 </Link>
               }
             />
-            <div className="divide-y divide-base-800">
+            <div className="divide-y divide-base-850">
               {next.map((s) => (
-                <div key={s.id} className="px-4 py-3">
+                <Row key={s.id}>
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="truncate text-[13px] text-base-200">{s.name}</span>
                     <span className="shrink-0 font-mono text-xs text-ember-400">
                       {formatCountdown(s.nextRunAt)}
                     </span>
                   </div>
-                  <div className="mt-0.5 text-xs text-base-600">
+                  <div className="mt-1 text-xs text-base-600">
                     {targetName(s.targetId)} · {s.cadence}
                   </div>
-                </div>
+                </Row>
               ))}
             </div>
-          </Card>
-        </div>
+          </div>
+        </Section>
 
-        <div className="grid gap-5 lg:grid-cols-2">
+        <Section flush className="grid lg:grid-cols-2 lg:divide-x lg:divide-base-850">
           {/* ---- defects ---- */}
-          <Card>
-            <CardHeader
+          <div>
+            <SectionHeader
               title="Open defects"
               subtitle="Failures the classifier attributed to the application"
               right={
@@ -169,9 +180,9 @@ export default function OverviewPage() {
                 </Link>
               }
             />
-            <div className="divide-y divide-base-800">
+            <div className="divide-y divide-base-850">
               {openDefects.slice(0, 4).map((d) => (
-                <div key={d.id} className="px-4 py-3">
+                <Row key={d.id}>
                   <div className="flex items-start gap-2">
                     <Badge tone={d.severity === "critical" ? "danger" : "warn"}>
                       {d.severity}
@@ -183,17 +194,17 @@ export default function OverviewPage() {
                       {Math.round(d.confidence * 100)}%
                     </span>
                   </div>
-                  <div className="mt-1 font-mono text-xs text-base-600">
+                  <div className="mt-1.5 font-mono text-xs text-base-600">
                     {targetName(d.targetId)} · {d.surface}
                   </div>
-                </div>
+                </Row>
               ))}
             </div>
-          </Card>
+          </div>
 
           {/* ---- riskiest untested ---- */}
-          <Card>
-            <CardHeader
+          <div className="border-t border-base-850 lg:border-t-0">
+            <SectionHeader
               title="Riskiest thin coverage"
               subtitle="Surfaces the plan barely touched — ranked by blast radius"
               right={
@@ -205,9 +216,9 @@ export default function OverviewPage() {
                 </Link>
               }
             />
-            <div className="divide-y divide-base-800">
+            <div className="divide-y divide-base-850">
               {riskiest.map((c) => (
-                <div key={c.id} className="px-4 py-3">
+                <Row key={c.id}>
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-[13px] text-base-200">{c.surface}</span>
                     <Badge tone={c.risk === "critical" ? "danger" : "warn"}>
@@ -216,16 +227,16 @@ export default function OverviewPage() {
                   </div>
                   <p className="mt-1 text-xs leading-relaxed text-base-600">{c.note}</p>
                   <Meter
-                    className="mt-2"
+                    className="mt-2.5 max-w-md"
                     value={Math.min(100, c.scenarios * 12)}
                     tone={c.risk === "critical" ? "danger" : "warn"}
                     label={`${c.surface} coverage`}
                   />
-                </div>
+                </Row>
               ))}
             </div>
-          </Card>
-        </div>
+          </div>
+        </Section>
       </PageBody>
     </>
   );

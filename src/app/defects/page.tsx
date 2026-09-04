@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { Badge, Card, CardHeader, Stat, type Tone } from "@/components/ui/primitives";
+import { Badge, Section, SectionHeader, Stat, type Tone } from "@/components/ui/primitives";
 import { DEFECTS, targetName } from "@/lib/mock-fleet";
 import { formatRelative } from "@/lib/format";
 import type { Priority } from "@/lib/types";
@@ -33,8 +33,8 @@ export default function DefectsPage() {
         subtitle="Failures the classifier attributed to the application, not the script. These were filed, never healed away."
       />
 
-      <PageBody className="space-y-5">
-        <Card className="grid divide-y divide-base-800 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+      <PageBody>
+        <Section className="grid divide-y divide-base-850 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           <Stat label="Open" value={open.length} tone={open.length ? "danger" : "ok"} />
           <Stat label="Critical" value={critical.length} tone="danger" hint="Blocking a core flow" />
           <Stat
@@ -43,16 +43,16 @@ export default function DefectsPage() {
             tone="ember"
             hint="How sure the classifier was it's an app bug"
           />
-        </Card>
+        </Section>
 
-        <Card>
-          <CardHeader
+        <Section>
+          <SectionHeader
             title="Filed by the classifier"
             subtitle="Each carries the evidence that separated it from script drift"
           />
-          <div className="divide-y divide-base-800">
+          <div className="divide-y divide-base-850">
             {DEFECTS.map((d) => (
-              <div key={d.id} className="px-4 py-4">
+              <div key={d.id} className="px-6 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex min-w-0 items-start gap-2.5">
                     <Badge tone={SEVERITY_TONE[d.severity]}>{d.severity}</Badge>
@@ -72,19 +72,19 @@ export default function DefectsPage() {
                     <Badge mono>{Math.round(d.confidence * 100)}%</Badge>
                     <Link
                       href={`/runs/${d.runId}`}
-                      className="rounded-lg border border-base-800 px-3 py-1.5 text-xs text-base-300 transition hover:border-base-700 hover:text-base-100"
+                      className="rounded-md border border-base-800 px-3 py-1.5 text-xs text-base-300 transition hover:border-base-700 hover:text-base-100"
                     >
                       Run
                     </Link>
                   </div>
                 </div>
-                <p className="mt-2.5 rounded-lg border border-base-800 bg-base-950/70 px-3 py-2 font-mono text-[11px] leading-relaxed text-base-400">
+                <p className="mt-3 rounded-md bg-base-900 px-3 py-2.5 font-mono text-[11px] leading-relaxed text-base-400">
                   {d.evidence}
                 </p>
               </div>
             ))}
           </div>
-        </Card>
+        </Section>
       </PageBody>
     </>
   );

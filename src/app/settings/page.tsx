@@ -1,5 +1,5 @@
 import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { Badge, Card, CardHeader } from "@/components/ui/primitives";
+import { Badge, Section, SectionHeader } from "@/components/ui/primitives";
 import { DEFAULT_RUN_OPTIONS, STAGE_META, STAGES } from "@/lib/types";
 
 export const metadata = { title: "Settings — The Odyssey" };
@@ -45,15 +45,15 @@ export default function SettingsPage() {
         subtitle="Defaults every new run inherits. A run may override any of them at launch."
       />
 
-      <PageBody className="grid gap-5 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Run defaults" subtitle="Applied unless the launcher overrides them" />
-          <div className="divide-y divide-base-800">
+      <PageBody className="grid lg:grid-cols-2 lg:divide-x lg:divide-base-850">
+        <Section>
+          <SectionHeader title="Run defaults" subtitle="Applied unless the launcher overrides them" />
+          <div className="divide-y divide-base-850">
             {DEFAULTS.map((d) => (
-              <div key={d.label} className="flex items-start justify-between gap-4 px-4 py-3">
+              <div key={d.label} className="flex items-start justify-between gap-4 px-6 py-3.5">
                 <div className="min-w-0">
                   <div className="text-[13px] text-base-200">{d.label}</div>
-                  <p className="mt-0.5 text-xs leading-relaxed text-base-600">{d.note}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-base-600">{d.note}</p>
                 </div>
                 <span className="shrink-0 font-mono text-sm tabular-nums text-ember-400">
                   {d.value}
@@ -61,17 +61,17 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
-        </Card>
+        </Section>
 
-        <div className="space-y-5">
-          <Card>
-            <CardHeader
+        <div>
+          <Section>
+            <SectionHeader
               title="Agent roster"
               subtitle="Who owns each stage of the pipeline"
             />
-            <div className="divide-y divide-base-800">
+            <div className="divide-y divide-base-850">
               {STAGES.map((stage) => (
-                <div key={stage} className="px-4 py-3">
+                <div key={stage} className="px-6 py-3.5">
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[13px] text-base-200">
                       {STAGE_META[stage].label}
@@ -80,29 +80,29 @@ export default function SettingsPage() {
                       {STAGE_META[stage].owner}
                     </Badge>
                   </div>
-                  <p className="mt-0.5 text-xs leading-relaxed text-base-600">
+                  <p className="mt-1 text-xs leading-relaxed text-base-600">
                     {STAGE_META[stage].blurb}
                   </p>
                 </div>
               ))}
             </div>
-          </Card>
+          </Section>
 
-          <Card>
-            <CardHeader title="Safety rails" subtitle="Non-negotiable, not configurable" />
-            <ul className="divide-y divide-base-800 text-xs leading-relaxed text-base-500">
+          <Section>
+            <SectionHeader title="Safety rails" subtitle="Non-negotiable, not configurable" />
+            <ul className="divide-y divide-base-850 text-xs leading-relaxed text-base-500">
               {[
                 "A healer patch that weakens or removes an assertion is rejected outright.",
                 "A failure classified as an application defect is filed as a bug and never healed.",
                 "Selectors that don't resolve on the live page quarantine the scenario instead of shipping a guess.",
                 "Credentials are held for the run only and redacted from every log line and model prompt.",
               ].map((line) => (
-                <li key={line} className="px-4 py-2.5">
+                <li key={line} className="px-6 py-3">
                   {line}
                 </li>
               ))}
             </ul>
-          </Card>
+          </Section>
         </div>
       </PageBody>
     </>

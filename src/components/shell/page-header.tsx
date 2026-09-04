@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
 
-/** The one header every non-console route wears, so pages line up vertically. */
+/**
+ * The one header every non-console route wears, so pages line up vertically.
+ * It shares the page gutter with every section below it, and its own rule is
+ * the first of the hairlines that divide the page.
+ */
 export function PageHeader({
   title,
   subtitle,
@@ -11,11 +15,13 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-4 border-b border-base-850 px-6 py-5">
+    <header className="flex flex-wrap items-center justify-between gap-4 border-b border-base-850 px-6 py-4">
       <div className="min-w-0">
-        <h1 className="text-lg font-semibold tracking-tight text-base-100">{title}</h1>
+        <h1 className="text-[15px] font-semibold tracking-tight text-base-100">
+          {title}
+        </h1>
         {subtitle ? (
-          <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-base-500">
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-base-500">
             {subtitle}
           </p>
         ) : null}
@@ -25,6 +31,10 @@ export function PageHeader({
   );
 }
 
+/**
+ * Page content runs edge to edge — no padding, no gaps. Sections carry their own
+ * gutter and close themselves with a rule, so regions meet without a seam.
+ */
 export function PageBody({
   children,
   className,
@@ -32,5 +42,5 @@ export function PageBody({
   children: ReactNode;
   className?: string;
 }) {
-  return <div className={`px-6 py-6 ${className ?? ""}`}>{children}</div>;
+  return <div className={className}>{children}</div>;
 }

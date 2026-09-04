@@ -1,4 +1,4 @@
-import { Badge, Card, CardHeader, Empty, type Tone } from "@/components/ui/primitives";
+import { Badge, Section, SectionHeader, Empty, type Tone } from "@/components/ui/primitives";
 import { cn, formatDuration } from "@/lib/format";
 import {
   TRIAGE_META,
@@ -36,8 +36,8 @@ export function TestBoard({
   }, {});
 
   return (
-    <Card className="flex min-h-0 flex-col">
-      <CardHeader
+    <Section flush className="flex min-h-0 flex-col">
+      <SectionHeader
         title="Generated suite"
         subtitle="Locators proven live before the file was written"
         right={
@@ -68,7 +68,7 @@ export function TestBoard({
               return (
                 <li
                   key={t.id}
-                  className="animate-stream-in px-4 py-2.5"
+                  className="animate-stream-in px-6 py-2.5"
                 >
                   <div className="flex items-start gap-2.5">
                     <StatusGlyph status={status} />
@@ -156,7 +156,7 @@ export function TestBoard({
           </ul>
         )}
       </div>
-    </Card>
+    </Section>
   );
 }
 
