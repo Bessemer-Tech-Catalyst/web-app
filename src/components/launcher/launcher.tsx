@@ -7,7 +7,7 @@ import { useRef, useState } from "react";
 import { Badge, Section, Dot } from "@/components/ui/primitives";
 import { DEFAULT_RUN_OPTIONS, type RunInput, type RunOptions } from "@/lib/types";
 import { cn } from "@/lib/format";
-import { newRunId, saveDraft } from "@/lib/run-draft";
+import { startRun } from "@/lib/run-client";
 
 // three.js is dead weight until the hero paints — and it needs a DOM, so no SSR pass.
 const HeroCanvas = dynamic(
@@ -31,6 +31,7 @@ export function Launcher() {
   const [options, setOptions] = useState<RunOptions>(DEFAULT_RUN_OPTIONS);
   const [advanced, setAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function normalise(raw: string): string | null {
@@ -44,8 +45,9 @@ export function Launcher() {
     }
   }
 
-  function launch(e: React.FormEvent) {
+  async function launch(e: React.FormEvent) {
     e.preventDefault();
+    if (starting) return;
     const normalised = normalise(url);
     if (!normalised) {
       setError("That doesn't look like a URL. Try something like shoplite.demo");
@@ -58,9 +60,17 @@ export function Launcher() {
       credentials: username ? { username, password } : undefined,
       options,
     };
-    const id = newRunId();
-    saveDraft(id, input);
-    router.push(`/runs/${id}`);
+    // The server owns the run id: it scaffolds the workspace and starts the
+    // orchestrator before answering, so the console has something to stream from
+    // the moment it mounts.
+    setStarting(true);
+    try {
+      const id = await startRun(input);
+      router.push(`/runs/${id}`);
+    } catch (err) {
+      setStarting(false);
+      setError(err instanceof Error ? err.message : "Could not start the run");
+    }
   }
 
   async function onPrdFile(file: File | undefined) {
@@ -101,7 +111,7 @@ export function Launcher() {
               htmlFor="target-url"
               className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-base-500"
             >
-              Target URL — the only thing that's required
+              Target URL — the only thing that&apos;s required
             </label>
             <div className="flex flex-col gap-2.5 sm:flex-row">
               <div className="relative flex-1">
@@ -128,9 +138,10 @@ export function Launcher() {
               </div>
               <button
                 type="submit"
-                className="group inline-flex items-center justify-center gap-2 rounded-md bg-ember-500 px-6 py-3 text-sm font-semibold text-base-950 transition hover:bg-ember-400 active:scale-[0.99]"
+                disabled={starting}
+                className="group inline-flex items-center justify-center gap-2 rounded-md bg-ember-500 px-6 py-3 text-sm font-semibold text-base-950 transition hover:bg-ember-400 active:scale-[0.99] disabled:opacity-60"
               >
-                Run the pipeline
+                {starting ? "Starting…" : "Run the pipeline"}
                 <span className="transition-transform group-hover:translate-x-0.5">→</span>
               </button>
             </div>
@@ -177,7 +188,7 @@ export function Launcher() {
                 className="w-full resize-none rounded-md border border-base-800 bg-base-950/80 px-3 py-2.5 text-sm text-base-100 placeholder:text-base-600"
               />
               <p className="mt-1.5 text-xs text-base-600">
-                Plain English. It steers the planner's scope and priorities.
+                Plain English. It steers the planner&apos;s scope and priorities.
               </p>
             </div>
 

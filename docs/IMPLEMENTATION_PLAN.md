@@ -88,8 +88,9 @@ Backups if it clashes: **Argus** (hundred-eyed watchman), **QAtalyst**, **Testud
 | Concern | Choice | Why |
 |---|---|---|
 | App | Next.js 16 App Router, TS strict, Tailwind v4 | One process serves UI *and* hosts the orchestrator. Route handlers on the Node runtime can spawn Playwright. |
-| Agent harness | `@anthropic-ai/claude-agent-sdk` (v0.3.x) | Gives the Claude Code harness as a library: subagents via `agents: Record<string, AgentDefinition>`, `mcpServers`, Read/Write/Edit/Bash built in, streaming `SDKMessage`s, `maxBudgetUsd`. Writing test files + running `npx playwright test` is *free* with it. |
-| Judgment calls | `@anthropic-ai/sdk` with `output_config.format` (structured outputs) | Critic / Classifier / Risk must return typed JSON, not prose. Don't use an agent loop for a single scored decision. |
+| Agent harness | `@openai/agents` (v0.17.x) | `Agent` takes `mcpServers` (`MCPServerStdio` / `MCPServerStreamableHttp`), `tools`, `handoffs` and `outputType`; `run(..., { stream: true })` gives us the narration the Decision Log renders, and per-request `usage` feeds the cost meter. |
+| Agent file/shell access | Our own `tool()` definitions over the run workspace | Unlike the Claude Agent SDK there is no built-in Read/Write/Edit/Bash — which suits us: each agent gets a narrow, workspace-scoped allowlist, and a generator that can `rm -rf` is a liability (§4). |
+| Judgment calls | `openai` SDK, Responses API with a strict JSON schema | Critic / Classifier / Risk must return typed JSON, not prose. Don't use an agent loop for a single scored decision. |
 | Browser control | `@playwright/mcp` (a11y-tree snapshots) | Deterministic, no vision model, ~10× cheaper than screenshots. `--isolated --headless --port` for programmatic HTTP transport. |
 | Test runtime | Real `@playwright/test` in a per-run workspace | Generated tests must be *real artifacts a team can commit*. Judge-checkable. |
 | Persistence | Append-only `events.ndjson` per run + `runs.json` index | See §2.1. |
@@ -236,18 +237,20 @@ writes `seed.spec.ts` so the Planner explores as an authenticated user.
 
 ### Model assignment
 
-Default every agent to **`claude-opus-5`** with adaptive thinking; effort is the cost dial:
+Default every agent to OpenAI's strongest reasoning model; reasoning effort is the cost dial:
 
 | Component | Model | Effort | Why |
 |---|---|---|---|
-| Orchestrator / Critic / Classifier | `claude-opus-5` | `high` | These are the judgment calls — the whole thesis |
-| Planner | `claude-opus-5` | `high` | Open-ended exploration |
-| Generator | `claude-opus-5` | `xhigh` | Generated-code quality is 20% of the score |
-| Healer | `claude-opus-5` | `high` | Long agentic loop |
-| Recon crawl summarisation | `claude-haiku-4-5` | — | High volume, low judgment |
+| Orchestrator / Critic / Classifier | frontier reasoning | `high` | These are the judgment calls — the whole thesis |
+| Planner | frontier reasoning | `high` | Open-ended exploration |
+| Generator | frontier reasoning | `high` | Generated-code quality is 20% of the score |
+| Healer | frontier reasoning | `high` | Long agentic loop |
+| Recon crawl summarisation | small/fast tier | `low` | High volume, low judgment |
 
-Expose per-agent model in Settings so we can downshift to `claude-sonnet-5` if we're burning
-credits during dev. Set `maxBudgetUsd` per run; surface live cost in the UI (judges love it).
+Exact model ids are pinned in one place (`src/server/agents/models.ts`) and exposed per-agent in
+Settings, so we can downshift a tier if we're burning credits during dev. The Agents SDK has no
+`maxBudgetUsd`, so the orchestrator enforces the budget itself from streamed `usage` — that guard
+already exists and already trips (see §6, Phase 2).
 
 ---
 
@@ -290,9 +293,9 @@ most of the *"how clearly does the team present the agent's decisions"* 15%.
 | Phase | Deliverable | Exit criterion |
 |---|---|---|
 | **0** ✅ | Research + this plan + `PLAN.md` | done |
-| **1** ◀ *now* | **UI shell.** Next.js scaffold, design system, `types.ts`, launcher page, mission-control page, report page, mock event emitter driving the whole thing | `pnpm dev` → enter a URL → watch a full fake pipeline stream, end to end, looking real |
-| **2** | Orchestrator FSM + real SSE + run store + workspace scaffolder. Agents still deterministic stubs | A real run row persists; UI streams from `events.ndjson`, not mocks; crash/reload resumes |
-| **3** | Recon + Planner (Agent SDK + Playwright MCP) + Coverage Critic + replan loop | Real `specs/*.md` from a real URL; a real critic verdict; a visible replan |
+| **1** ✅ | **UI shell.** Next.js scaffold, design system, `types.ts`, launcher page, mission-control page, report page, mock event emitter driving the whole thing | `pnpm dev` → enter a URL → watch a full fake pipeline stream, end to end, looking real |
+| **2** ✅ | Orchestrator FSM + real SSE + run store + workspace scaffolder. Agents still deterministic stubs | A real run row persists; UI streams from `events.ndjson`, not mocks; crash/reload resumes |
+| **3** ◀ *now* | Recon + Planner (`@openai/agents` + Playwright MCP) + Coverage Critic + replan loop | Real `specs/*.md` from a real URL; a real critic verdict; a visible replan |
 | **4** | Generator w/ live selector validation + executor (`playwright test --reporter=json`) + shard parallelism | Real green tests on the demo target |
 | **5** | Triage/classifier + Healer + assertion-integrity guard + bounded re-execute | A deliberately broken selector gets healed; a deliberately broken app gets filed as a bug, *not* healed |
 | **6** | Report synthesis, PRD gap analysis, risk ledger, artifact viewer (trace/video/screenshot) | The report answers all six must-have bullets |

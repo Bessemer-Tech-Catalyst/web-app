@@ -400,7 +400,14 @@ export type OrchestratorEvent = EventBase &
     | { type: "bug.filed"; bug: FiledBug }
     | { type: "cost"; usd: number; tokensIn: number; tokensOut: number }
     | { type: "run.finished"; status: RunStatus; report: TestQualityReport }
-    | { type: "error"; stage: Stage; message: string; recoverable: boolean }
+    | {
+        type: "error";
+        stage: Stage;
+        message: string;
+        recoverable: boolean;
+        /** Set when this error ends the run, so the fold knows how it ended. */
+        terminal?: RunStatus;
+      }
   );
 
 /**
@@ -435,6 +442,8 @@ export interface RunState {
   runId: string | null;
   input: RunInput | null;
   status: RunStatus;
+  /** From the `run.started` event, so elapsed time survives a reload. */
+  startedAt: string | null;
   stages: Record<Stage, { status: StageStatus; attempt: number; durationMs?: number }>;
   currentStage: Stage | null;
   decisions: Extract<OrchestratorEvent, { type: "decision" }>[];
@@ -461,6 +470,7 @@ export function emptyRunState(): RunState {
     runId: null,
     input: null,
     status: "queued",
+    startedAt: null,
     stages: Object.fromEntries(
       STAGES.map((s) => [s, { status: "pending" as StageStatus, attempt: 0 }]),
     ) as RunState["stages"],
@@ -493,7 +503,13 @@ export function reduceRun(state: RunState, ev: OrchestratorEvent): RunState {
   const s = { ...state };
   switch (ev.type) {
     case "run.started":
-      return { ...s, runId: ev.runId, input: ev.input, status: "running" };
+      return {
+        ...s,
+        runId: ev.runId,
+        input: ev.input,
+        status: "running",
+        startedAt: ev.ts,
+      };
 
     case "stage.entered":
       return {
@@ -567,7 +583,12 @@ export function reduceRun(state: RunState, ev: OrchestratorEvent): RunState {
       return { ...s, status: ev.status, report: ev.report, currentStage: null };
 
     case "error":
-      return { ...s, errors: [...s.errors, ev] };
+      return {
+        ...s,
+        errors: [...s.errors, ev],
+        status: ev.terminal ?? s.status,
+        currentStage: ev.terminal ? null : s.currentStage,
+      };
 
     default:
       return s;

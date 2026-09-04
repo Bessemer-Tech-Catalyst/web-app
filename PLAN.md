@@ -164,8 +164,8 @@ as the React app, so there's one thing to run and one thing to deploy.
 |---|---|---|
 | UI | React 19 + TypeScript + Tailwind v4 | What you know |
 | App/server | Next.js 16 (App Router) | React frontend + Node backend, one process |
-| Agents | Claude Agent SDK | Gives us sub-agents, file writing, and shell access out of the box |
-| Brains | Claude Opus 5 | The orchestrator's judgment calls are the whole thesis — don't cheap out here |
+| Agents | OpenAI Agents SDK (`@openai/agents`) | Sub-agents, handoffs, MCP servers and structured outputs in one framework |
+| Brains | OpenAI's strongest reasoning model | The orchestrator's judgment calls are the whole thesis — don't cheap out here |
 | Browser | Playwright MCP | Reads the page's accessibility tree, not screenshots — faster, cheaper, far less flaky than vision |
 | Tests | Real Playwright test files | They must be real files a team could actually commit |
 | Storage | Local files | ← see below |
@@ -196,9 +196,9 @@ so it's a swap, not a rewrite.
 | Phase | What | Status |
 |---|---|---|
 | 0 | Research + this plan | ✅ done |
-| **1** | **The UI** — both screens, fully working, driven by a realistic fake run | ◀ **building now** |
-| 2 | The orchestrator state machine + real live streaming + saved runs | |
-| 3 | Recon + Planner + the Coverage Critic (real browser, real Claude) | |
+| 1 | The UI — both screens, fully working, driven by a realistic fake run | ✅ done |
+| **2** | **The orchestrator state machine + real live streaming + saved runs** | ✅ done |
+| **3** | Recon + Planner + the Coverage Critic (real browser, real model) | ◀ **next** |
 | 4 | Generator with live selector proving + parallel test execution | |
 | 5 | Triage + Healer + the assertion guard | |
 | 6 | Final report, PRD gap analysis, risk ledger, screenshot/video viewer | |
@@ -223,10 +223,15 @@ So when phase 2 plugs in the real engine, **the UI doesn't change at all.** No r
 
 ---
 
-## What we're building right now
+## Where we are
 
-Phase 1: both screens, the design system, the full data model, and a scripted fake run so you can
-watch the entire pipeline stream end to end today — before a single line of agent code exists.
+Phases 1 and 2 are done. The UI is built, and it is no longer driven by a fake: the server creates
+a run, scaffolds its workspace, drives a real state machine over it, writes an append-only event
+log, and streams that log to the browser. Reload the page mid-run and it resumes exactly where it
+was. Cancel it and it stops. The judgment lives in the orchestrator — the coverage gate, the
+bug-vs-script call, the assertion guard, the budget ceiling — and the three sub-agents sit behind
+an interface with deterministic stand-ins, so Phase 3 swaps in the real ones one at a time without
+touching anything above them.
 
 The detailed engineering version of this plan is in
 [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).

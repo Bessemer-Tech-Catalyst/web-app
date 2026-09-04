@@ -1,85 +1,93 @@
 "use client";
 
 /**
- * Subscribes to a run's event stream and folds it into `RunState`.
+ * Subscribes to a run's server-sent event stream and folds it into `RunState`.
  *
- * Phase 1 plays a scripted local run. Phase 2 swaps the body of `subscribe()` for an
- * EventSource against `/api/runs/:id/events` — the reducer, the state shape and every
- * component that consumes them stay exactly as they are.
+ * The transport is deliberately thin: the server replays the run's event log from the
+ * last sequence we saw and then tails it live, so a reload, a dropped connection or a
+ * server restart all resume losslessly through the same path. `reduceRun` — the same
+ * reducer the server uses to build the report — does the rest.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { buildMockRun } from "@/lib/mock-run";
+import { useEffect, useRef, useState } from "react";
 import {
   emptyRunState,
   reduceRun,
   type OrchestratorEvent,
-  type RunInput,
   type RunState,
 } from "@/lib/types";
 
-export type Speed = 1 | 2 | 4;
+export type StreamStatus = "connecting" | "live" | "ended" | "error";
 
-export function useRunStream(runId: string, input: RunInput | null) {
+export function useRunStream(runId: string) {
   const [state, setState] = useState<RunState>(emptyRunState);
-  const [speed, setSpeed] = useState<Speed>(1);
-  const [done, setDone] = useState(false);
+  const [status, setStatus] = useState<StreamStatus>("connecting");
 
-  const speedRef = useRef<Speed>(1);
-  speedRef.current = speed;
+  /** Survives reconnects so we resume rather than replay from zero. */
+  const lastSeq = useRef(-1);
 
-  /** Set by skipToEnd so the in-flight playback loop stops overwriting state. */
-  const skippedRef = useRef(false);
-
-  const script = useMemo(
-    () => (input ? buildMockRun(runId, input) : null),
-    [runId, input],
-  );
+  // Navigating from one run to another reuses this hook, so the fold has to be
+  // reset during render rather than in an effect — otherwise the new run's first
+  // events would land on top of the previous run's state.
+  const [subscribed, setSubscribed] = useState(runId);
+  if (subscribed !== runId) {
+    setSubscribed(runId);
+    setState(emptyRunState());
+    setStatus("connecting");
+  }
 
   useEffect(() => {
-    if (!script) return;
+    lastSeq.current = -1;
 
+    let source: EventSource | null = null;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let i = 0;
 
-    skippedRef.current = false;
-    setState(emptyRunState());
-    setDone(false);
+    const connect = () => {
+      if (cancelled) return;
+      const from = lastSeq.current + 1;
+      source = new EventSource(`/api/runs/${runId}/events?from=${from}`);
 
-    const step = () => {
-      if (cancelled || skippedRef.current || i >= script.length) {
-        if (!cancelled && !skippedRef.current) setDone(true);
-        return;
-      }
-      const { delayMs, event } = script[i++];
-      timer = setTimeout(() => {
-        if (cancelled || skippedRef.current) return;
-        setState((prev) => reduceRun(prev, event));
-        step();
-      }, Math.max(16, delayMs / speedRef.current));
+      source.onopen = () => setStatus("live");
+
+      source.onmessage = (e) => {
+        let ev: OrchestratorEvent;
+        try {
+          ev = JSON.parse(e.data) as OrchestratorEvent;
+        } catch {
+          return;
+        }
+        // The server can only guarantee ordering, not exactly-once across a
+        // reconnect that raced the watermark. Drop anything we already folded.
+        if (ev.seq <= lastSeq.current) return;
+        lastSeq.current = ev.seq;
+        setState((prev) => reduceRun(prev, ev));
+      };
+
+      // The run is over — the server says so explicitly rather than hanging up,
+      // so we can tell "finished" apart from "connection dropped".
+      source.addEventListener("end", () => {
+        cancelled = true;
+        source?.close();
+        setStatus("ended");
+      });
+
+      source.onerror = () => {
+        source?.close();
+        if (cancelled) return;
+        setStatus("error");
+        retry = setTimeout(connect, 1_500);
+      };
     };
 
-    step();
+    connect();
 
     return () => {
       cancelled = true;
-      if (timer) clearTimeout(timer);
+      clearTimeout(retry);
+      source?.close();
     };
-  }, [script]);
+  }, [runId]);
 
-  /** Fast-forward: fold every remaining event immediately. Handy mid-demo. */
-  const skipToEnd = useCallback(() => {
-    if (!script) return;
-    skippedRef.current = true;
-    setState(
-      script.reduce<RunState>(
-        (acc, t) => reduceRun(acc, t.event as OrchestratorEvent),
-        emptyRunState(),
-      ),
-    );
-    setDone(true);
-  }, [script]);
-
-  return { state, speed, setSpeed, done, skipToEnd };
+  return { state, status, done: status === "ended" };
 }
