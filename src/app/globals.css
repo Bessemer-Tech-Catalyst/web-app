@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Crucible — "mission control" theme.
+   Near-black base, molten accent (it's a crucible), semantic status ramp.
+   --------------------------------------------------------------------------- */
+
+@theme {
+  --color-base-950: oklch(0.145 0.008 265);
+  --color-base-900: oklch(0.178 0.009 265);
+  --color-base-850: oklch(0.208 0.010 265);
+  --color-base-800: oklch(0.245 0.011 265);
+  --color-base-700: oklch(0.318 0.012 265);
+  --color-base-600: oklch(0.432 0.013 265);
+  --color-base-500: oklch(0.556 0.014 265);
+  --color-base-400: oklch(0.665 0.014 265);
+  --color-base-300: oklch(0.775 0.012 265);
+  --color-base-200: oklch(0.868 0.008 265);
+  --color-base-100: oklch(0.945 0.005 265);
+
+  /* Molten — the accent. Reserved for decisions and primary actions. */
+  --color-ember-600: oklch(0.585 0.198 42);
+  --color-ember-500: oklch(0.672 0.191 45);
+  --color-ember-400: oklch(0.755 0.164 55);
+  --color-ember-300: oklch(0.828 0.130 68);
+
+  --color-ok-500: oklch(0.702 0.160 155);
+  --color-ok-400: oklch(0.782 0.146 156);
+  --color-warn-500: oklch(0.780 0.152 78);
+  --color-danger-500: oklch(0.634 0.208 22);
+  --color-danger-400: oklch(0.712 0.184 22);
+  --color-info-500: oklch(0.680 0.140 245);
+  --color-violet-500: oklch(0.660 0.170 300);
+
+  --font-sans:
+    var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  --animate-stream-in: stream-in 0.34s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-pulse-ring: pulse-ring 2s ease-out infinite;
+  --animate-scan: scan 2.2s linear infinite;
+}
+
+@keyframes stream-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-ember-500) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 9px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes scan {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-base-950);
+  color: var(--color-base-200);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle forge glow behind the app shell. */
+.forge-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(
+      60rem 32rem at 50% -12%,
+      color-mix(in oklch, var(--color-ember-600) 13%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      40rem 26rem at 88% 6%,
+      color-mix(in oklch, var(--color-info-500) 7%, transparent),
+      transparent 70%
+    );
+}
+
+/* Fine grid — reads as an instrument panel, not a landing page. */
+.grid-fade {
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in oklch, var(--color-base-700) 32%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklch, var(--color-base-700) 32%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 44px 44px;
+  mask-image: radial-gradient(70% 55% at 50% 0%, #000 10%, transparent 100%);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-base-800);
+  border-radius: 99px;
+  border: 2px solid var(--color-base-950);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-base-700);
+}
+
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-ember-500);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

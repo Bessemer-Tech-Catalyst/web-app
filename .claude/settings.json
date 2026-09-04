@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/satyam/Documents/projects/web-app log --oneline -5)",
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:playwright.dev)",
+      "WebFetch(domain:bug0.com)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(pnpm -v)",
+      "Bash(pnpm create *)",
+      "Bash(pnpm install *)",
+      "WebFetch(domain:www.tasteskill.dev)"
+    ]
+  }
+}
