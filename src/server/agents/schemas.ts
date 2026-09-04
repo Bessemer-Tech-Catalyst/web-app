@@ -145,6 +145,35 @@ export function toCritique(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Generator
+// ---------------------------------------------------------------------------
+
+/**
+ * One scenario's worth of Generator output.
+ *
+ * `outcome` is the Generator's *recommendation*, not the decision. The orchestrator
+ * quarantines on its own account too, whenever the emitted code turns out to use a
+ * locator the run never resolved — see `locator-provenance.ts`. An agent that could
+ * declare its own work verified would be judging, and judging is not its job.
+ */
+export const generatedTestSchema = z.object({
+  outcome: z
+    .enum(["emit", "quarantine"])
+    .describe("emit only if every element the test needs was found on the live page"),
+  reason: z
+    .string()
+    .describe(
+      "One or two sentences a person will read. On quarantine, name the element or state you could not reach.",
+    ),
+  code: z
+    .string()
+    .nullable()
+    .describe("The complete .spec.ts file when emitting; null when quarantining"),
+});
+
+export type GeneratedTestOutput = z.infer<typeof generatedTestSchema>;
+
 export function toEvidence(items: z.infer<typeof evidenceSchema>[]): Evidence[] {
   return items.map((e) => ({
     kind: e.kind,

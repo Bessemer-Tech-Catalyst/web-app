@@ -45,3 +45,8 @@ next-env.d.ts
 
 # Playwright MCP scratch output (traces, page dumps) from ad-hoc probes
 /.playwright-mcp/
+
+# Playwright's defaults, for when a suite is run by hand outside a run workspace.
+# A generated suite pins both of these inside .odyssey/runs/<id>/results/ instead.
+/playwright-report/
+/test-results/

@@ -20,6 +20,7 @@
 import { checkAssertionIntegrity } from "./assertion-guard";
 import { stubAgents } from "./stub-agents";
 import type { AgentContext, Agents, ReconResult } from "./agents";
+import { headed } from "../browser-mode";
 import { runDir } from "../paths";
 import { writeArtifact } from "../workspace";
 import {
@@ -62,6 +63,7 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
     tool: (agent, tool, summary, ok = true) =>
       emit({ type: "agent.tool", agent, tool, summary, ok }),
     artifact: (kind, path, title) => emit({ type: "artifact", kind, path, title }),
+    overBudget: () => budgetExceeded,
     spend: (usd, tokensIn, tokensOut) => {
       costUsd += usd;
       emit({ type: "cost", usd, tokensIn, tokensOut });
@@ -73,19 +75,25 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
           `Spend has passed the $${input.options.budgetUsd.toFixed(2)} ceiling set for this run. ` +
             "Continuing would trade an unbounded amount of money for a marginal amount of coverage, " +
             "so the orchestrator degrades gracefully and reports what it has rather than pressing on.",
-          0.99,
           [{ kind: "heuristic", summary: `Spend $${costUsd.toFixed(2)} of $${input.options.budgetUsd.toFixed(2)}` }],
         );
       }
     },
   };
 
+  /**
+   * A judgment, with its reasoning and the facts behind it.
+   *
+   * `confidence` is deliberately last and optional. Pass it only when something computed
+   * it; a plausible-looking literal on the panel the demo is judged on is worse than no
+   * number at all, and eleven of the twelve decisions here used to carry one.
+   */
   const decide = (
     stage: Stage,
     action: string,
     rationale: string,
-    confidence: number,
     evidence: Evidence[],
+    confidence?: number,
   ) => emit({ type: "decision", stage, action, rationale, confidence, evidence });
 
   /** Wraps a stage so entry, exit, duration and failure handling are never forgotten. */
@@ -123,7 +131,6 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
       "Compact each page to an interactive-element digest instead of raw HTML",
       "Raw DOM would consume roughly 40× the tokens and buries the signal. The accessibility " +
         "tree gives deterministic, nameable targets and keeps the planner inside its context budget.",
-      0.96,
       value.evidence.slice(0, 1),
     );
     emit({ type: "recon.ready", routes: value.routes, authenticated: value.authenticated });
@@ -163,7 +170,6 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
         "critique",
         `Accept the plan at ${graded.score}/100 and proceed to generation`,
         graded.rationale,
-        0.9,
         [
           graded.previousScore
             ? { kind: "heuristic", summary: `Coverage ${graded.previousScore} → ${graded.score} after ${attempt - 1} re-plan` }
@@ -181,7 +187,6 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
         `The plan still scores below threshold, but it has been re-planned ${attempt - 1} time(s) and the ` +
           `allowance is ${input.options.maxReplans}. Looping further would spend the run's clock on planning ` +
           "instead of evidence. The unclosed gaps are carried into the risk ledger so nothing is silently dropped.",
-        0.72,
         [
           { kind: "heuristic", summary: `Score ${graded.score}/100, ${graded.gaps.length} gaps unresolved` },
           { kind: "heuristic", summary: `maxReplans = ${input.options.maxReplans}` },
@@ -194,7 +199,6 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
       "critique",
       `Reject the plan and re-plan with ${graded.gaps.length} targeted directives`,
       graded.rationale,
-      0.93,
       [
         {
           kind: "heuristic",
@@ -219,20 +223,33 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
         "generate",
         `Quarantine "${q.title}" instead of emitting a guessed selector`,
         q.reason,
-        0.89,
-        [{ kind: "selector-provenance", summary: "Required element absent from the live accessibility snapshot" }],
+        // The reason *is* the evidence here: it names the element that could not be
+        // resolved, or the locators the provenance check could not account for. A
+        // second, generic line restating it added nothing a reader could check.
+        [{ kind: "selector-provenance", summary: q.reason }],
       );
     }
     const verified = value.tests.reduce((n, t) => n + t.selectorsVerified, 0);
     const total = value.tests.reduce((n, t) => n + t.selectorsTotal, 0);
     decide(
       "generate",
-      `Ship ${value.tests.length} verified tests; hold ${value.quarantined.length} scenarios in quarantine`,
-      "A suite where every selector is proven is worth more than a larger suite with guessed " +
-        "locators. The held scenarios are reported with reasons rather than dropped, so the team " +
-        "can unblock them deliberately.",
-      0.95,
-      [{ kind: "selector-provenance", summary: `${verified}/${total} emitted locators verified against the live page` }],
+      value.tests.length
+        ? `Ship ${value.tests.length} verified tests; hold ${value.quarantined.length} scenarios in quarantine`
+        : `Ship nothing — all ${value.quarantined.length} scenarios failed the provenance check`,
+      value.tests.length
+        ? "A suite where every selector is proven is worth more than a larger suite with guessed " +
+          "locators. Each emitted locator was resolved on the live page by Playwright itself " +
+          "during generation; the held scenarios are reported with reasons rather than dropped, " +
+          "so the team can unblock them deliberately."
+        : "Every scenario either could not be walked to its state or produced code using locators " +
+          "the run never resolved. Emitting them would be guessing, so nothing is emitted. This " +
+          "is a failed generation, not a small suite, and it is reported as one.",
+      [
+        {
+          kind: "selector-provenance",
+          summary: `${verified}/${total} emitted locators resolved on the live page during generation`,
+        },
+      ],
     );
     return { value };
   });
@@ -246,15 +263,18 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
     // rationale unconditionally — including "Shard 0 tests across 4 workers", citing
     // evidence ("no shared mutable state detected") that nothing in the pipeline
     // measures. A Decision Log entry has to correspond to a choice actually made.
-    if (generated.tests.length > 1 && input.options.parallelWorkers > 1) {
-      const workers = Math.min(input.options.parallelWorkers, generated.tests.length);
+    //
+    // And the choice is not `parallelWorkers`: a headed run is watched by a person and
+    // the generated config pins it to one worker, so on the normal path there is no
+    // fan-out to announce at all.
+    const workers = headed() ? 1 : Math.min(input.options.parallelWorkers, generated.tests.length);
+    if (generated.tests.length > 1 && workers > 1) {
       decide(
         "execute",
         `Shard ${generated.tests.length} tests across ${workers} workers`,
-        "Each generated test bootstraps its own session, so the suite has no ordering " +
-          `requirement between flows and can be split. ${workers} workers is this run's ` +
-          "parallelism setting bounded by the test count, so no worker starts idle.",
-        0.9,
+        "Each generated test bootstraps its own session from the same storage state, so the " +
+          `suite has no ordering requirement between flows and can be split. ${workers} workers ` +
+          "is this run's parallelism setting bounded by the test count, so no worker starts idle.",
         [{ kind: "heuristic", summary: `${generated.tests.length} independent tests, ${workers} workers` }],
       );
     }
@@ -288,8 +308,11 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
             "Healing a real defect deletes the exact signal the suite exists to produce, so these stay red " +
             `and are filed as bugs. ${drift.length} script-drift failure(s) go to the Healer; ` +
             `${flakes.length} suspected flake(s) are retried once before reclassification.`,
-          Math.min(...value.map((v) => v.confidence)),
           value.flatMap((v) => v.evidence.filter((e) => e.kind === "http-status" || e.kind === "snapshot-diff")).slice(0, 3),
+          // The one confidence in the run that is computed rather than chosen: the
+          // weakest of the classifier's own per-failure confidences, because the
+          // decision is only as sound as the least certain verdict it rests on.
+          Math.min(...value.map((v) => v.confidence)),
         );
       }
 
@@ -351,7 +374,6 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
               "The patch would make the test pass without verifying the behaviour it exists to verify. " +
                 "The guard rejects any patch that deletes, loosens, retargets or negates an assertion; " +
                 "the Healer may only change locators and waits.",
-              0.99,
               guard.violations.map((v) => ({ kind: "assertion-diff" as const, summary: v })),
             );
             continue;
@@ -376,7 +398,6 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
             "Repeated patches failed to make the test pass without weakening it. Escalating with the " +
               "attempt history attached is the honest outcome; a test that only passes because it stopped " +
               "checking anything is worse than a red one.",
-            0.88,
             [{ kind: "heuristic", summary: `${heals.filter((h) => h.testId === t.testId).length} attempts, none converged` }],
           );
         }
@@ -458,12 +479,17 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
           "than as a green run: a report that says nothing went wrong, when nothing ran, is worse than no " +
           "report. The risk ledger below is the entire result."
         : failed
-          ? "The red tests are confirmed application defects, not script problems. Leaving them red is the " +
-            "correct outcome — a green suite here would be a lie. They are filed as bugs with traces attached, " +
-            "and the risk ledger names the surfaces we never reached."
+          ? // What the red tests mean is the classifier's call, and saying more than it
+            // found would be inventing a verdict. Bugs are named only when triage filed one.
+            (bugs.length
+              ? `${bugs.length} of them are classified as genuine application defects and are filed as bugs ` +
+                "with their evidence attached. Leaving those red is the correct outcome — healing a real " +
+                "defect deletes the signal the suite exists to produce. "
+              : "They are reported unclassified: no failure was routed to the defect classifier in this run, " +
+                "so nothing here claims to know whether the script or the application is at fault. ") +
+            "The risk ledger names the surfaces we never reached."
           : "Every generated test passes and every quarantined scenario is reported with a reason. The risk " +
             "ledger names what we did not reach so the green result is not mistaken for total coverage.",
-      executed === 0 ? 0.99 : 0.96,
       [
         {
           kind: "heuristic",
@@ -478,6 +504,25 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
     return { value };
   });
 
-  emit({ type: "run.finished", status: "succeeded", report });
-  return "succeeded";
+  // A run that produced no running test did not succeed, whatever the Decision Log says
+  // about it. The status field is what the run list, the index and every glance at the
+  // home page read, and it used to say `succeeded` for a pipeline that had emitted
+  // nothing — the one place the honesty had to hold and the one place it did not.
+  const executedAnything =
+    report.passed + report.healed + report.failed > 0;
+  const status: RunStatus = executedAnything ? "succeeded" : "failed";
+  if (!executedAnything) {
+    emit({
+      type: "error",
+      stage: "report",
+      message:
+        `The run finished without executing a single test: ${scenarios.length} scenario(s) planned, ` +
+        `${generated.quarantined.length} quarantined, ${generated.tests.length} generated. The report ` +
+        "below is real, but it contains no evidence about the application.",
+      recoverable: false,
+    });
+  }
+
+  emit({ type: "run.finished", status, report });
+  return status;
 }

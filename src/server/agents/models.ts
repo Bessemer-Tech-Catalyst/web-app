@@ -72,8 +72,8 @@ function tier(envKey: string, defaultEffort: ReasoningEffort): ModelTier {
  * at module scope (which would bake dev values into the build).
  *
  * Overrides, in precedence order:
- *   ODYSSEY_MODEL_RECON / _PLANNER / _CRITIC   — per agent
- *   ODYSSEY_MODEL                              — all agents
+ *   ODYSSEY_MODEL_RECON / _PLANNER / _CRITIC / _GENERATOR   — per agent
+ *   ODYSSEY_MODEL                                           — all agents
  *   the pinned default above
  * Effort takes `<VAR>_EFFORT`, e.g. ODYSSEY_MODEL_CRITIC_EFFORT=high.
  */
@@ -90,6 +90,10 @@ export const models = {
   get critic(): ModelTier {
     return tier("ODYSSEY_MODEL_CRITIC", "medium");
   },
+  /** Writes code that has to compile and run. §4 scores generated-code quality at 20%. */
+  get generator(): ModelTier {
+    return tier("ODYSSEY_MODEL_GENERATOR", "medium");
+  },
 };
 
 /** Prices a stage's streamed usage so the orchestrator's budget guard can act on it. */
@@ -103,5 +107,6 @@ export function describeModels() {
     recon: models.recon,
     planner: models.planner,
     critic: models.critic,
+    generator: models.generator,
   };
 }

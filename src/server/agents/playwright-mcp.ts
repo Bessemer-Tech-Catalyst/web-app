@@ -70,13 +70,75 @@ export const PLANNER_TOOLS = [
 ];
 
 /**
+ * The Generator drives the app for real, because a locator can only be proven in the
+ * state it lives in — the confirm button of a cancellation dialog does not exist until
+ * something opens the dialog. So it gets Recon's interaction set plus the `testing`
+ * capability's four verification tools and `browser_generate_locator`, which is the one
+ * that matters: it hands back the exact Playwright expression for an element in the
+ * current snapshot, so the emitted test carries a locator Playwright itself wrote rather
+ * than one a model recalled.
+ *
+ * Still absent, for the same reason as everywhere else: `browser_evaluate` and
+ * `browser_run_code_unsafe` (arbitrary JS in the page) and `browser_file_upload` (host
+ * filesystem). `browser_handle_dialog` is in, because a destructive scenario has to be
+ * able to dismiss the confirmation it just opened.
+ */
+export const GENERATOR_TOOLS = [
+  "browser_navigate",
+  "browser_navigate_back",
+  "browser_snapshot",
+  "browser_find",
+  "browser_click",
+  "browser_type",
+  "browser_fill_form",
+  "browser_select_option",
+  "browser_press_key",
+  "browser_hover",
+  "browser_handle_dialog",
+  "browser_wait_for",
+  "browser_tabs",
+  "browser_console_messages",
+  "browser_network_requests",
+  "browser_take_screenshot",
+  "browser_generate_locator",
+  "browser_verify_element_visible",
+  "browser_verify_text_visible",
+  "browser_verify_value",
+  "browser_verify_list_visible",
+];
+
+export type McpAgent = "recon" | "planner" | "generator";
+
+const TOOLS: Record<McpAgent, string[]> = {
+  recon: RECON_TOOLS,
+  planner: PLANNER_TOOLS,
+  generator: GENERATOR_TOOLS,
+};
+
+/**
+ * Server-side capabilities, which are a different axis from the allowlist above.
+ *
+ * `--caps` decides which tools the server *exposes at all*; the allowlist decides which
+ * of those a given model may see. The Generator's server is started with `storage` even
+ * though `browser_storage_state` is not in `GENERATOR_TOOLS`, because the orchestrator
+ * calls that one itself, deterministically, to dump the signed-in session for the
+ * generated suite (see `./storage-state.ts`). The model never gets offered it — which is
+ * the point: reading the session out is our job, and writing one back in is nobody's.
+ */
+const CAPS: Record<McpAgent, string> = {
+  recon: "vision",
+  planner: "vision",
+  generator: "testing,storage",
+};
+
+/**
  * Spawns the MCP server for a run. Not connected — the caller owns the lifecycle so a
  * `finally` can always close it; an orphaned Chromium outlives the run otherwise.
  */
 export function createPlaywrightServer(
   runId: string,
   input: RunInput,
-  agent: "recon" | "planner",
+  agent: McpAgent,
   /** Path to the watch overlay, when this is a headed run someone is watching. */
   overlayPath?: string,
 ): MCPServerStdio {
@@ -116,16 +178,14 @@ export function createPlaywrightServer(
       runPath(runId, "results"),
       // The MCP server's own filesystem access is confined to the run workspace.
       "--caps",
-      "vision",
+      CAPS[agent],
     ],
     cwd: runPath(runId),
     // Deliberately not inheriting process.env: the model provider key has no business
     // inside the browser process, and neither does anything else in the app's env.
     env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
     cacheToolsList: true,
-    toolFilter: {
-      allowedToolNames: agent === "recon" ? RECON_TOOLS : PLANNER_TOOLS,
-    },
+    toolFilter: { allowedToolNames: TOOLS[agent] },
     clientSessionTimeoutSeconds: 120,
   };
   return new MCPServerStdio(options);
@@ -135,7 +195,7 @@ export function createPlaywrightServer(
 export async function withPlaywright<T>(
   runId: string,
   input: RunInput,
-  agent: "recon" | "planner",
+  agent: McpAgent,
   body: (server: MCPServerStdio) => Promise<T>,
 ): Promise<T> {
   // Written into the run workspace rather than shipped as a file on disk, so it cannot
