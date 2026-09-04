@@ -122,6 +122,12 @@ body {
   mask-image: radial-gradient(70% 55% at 50% 0%, #000 10%, transparent 100%);
 }
 
+/* The activation band sits above the headline; it dissolves at every edge so the
+   canvas has no visible bounds and the type below stays on flat ground. */
+.hero-webgl {
+  mask-image: radial-gradient(72% 88% at 50% 50%, #000 18%, transparent 100%);
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
