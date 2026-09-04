@@ -18,6 +18,7 @@
  */
 
 import { checkAssertionIntegrity } from "./assertion-guard";
+import { unifiedDiff } from "./patch";
 import { stubAgents } from "./stub-agents";
 import type { AgentContext, Agents, ReconResult } from "./agents";
 import { headed } from "../browser-mode";
@@ -324,8 +325,12 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
         const bug: FiledBug = {
           id: `bug-${d.testId}`,
           testId: d.testId,
-          title: `${results.get(d.testId)?.title ?? d.testId} — application defect`,
-          severity: "high",
+          // The classifier's own words when it named the defect. Falling back to the
+          // test's title is the honest default; inventing a description of a bug that
+          // nothing diagnosed would be the orchestrator asserting a finding it does
+          // not have.
+          title: d.bug?.title ?? `${results.get(d.testId)?.title ?? d.testId} — application defect`,
+          severity: d.bug?.severity ?? "high",
           evidence: d.evidence,
         };
         bugs.push(bug);
@@ -343,6 +348,26 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
     await stage("heal", 1, async () => {
       for (const t of healable) {
         let healed = false;
+
+        // A suspected flake is retried before it is patched, because the cheapest way to
+        // find out whether anything is actually wrong with a test is to run it again.
+        // Patching a test that was only ever slow would bake a workaround into the suite
+        // for a problem that does not exist.
+        if (t.verdict === "ENV_FLAKE") {
+          decide(
+            "heal",
+            `Retry ${t.testId} before patching anything`,
+            "The classifier called this an environment flake, not a defect in the test or the application. " +
+              "A retry costs one test run and settles it: if it passes, there was never anything to heal, and " +
+              "if it fails the same way twice it was not a flake and the Healer takes it.",
+            t.evidence.slice(0, 2),
+            t.confidence,
+          );
+          const retry = await agents.rerun(ctx, { testId: t.testId, attempt: 2, healed: false });
+          results.set(retry.testId, retry);
+          emit({ type: "test.result", result: retry });
+          if (retry.status === "passed" || retry.status === "healed") continue;
+        }
 
         for (let n = 1; n <= input.options.maxHealAttemptsPerTest; n++) {
           const proposal = await agents.proposeHeal(ctx, { testId: t.testId, attempt: n, triage: t });
@@ -362,7 +387,12 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
             before: proposal.before,
             after: proposal.after,
             assertionsIntact: guard.intact,
-            outcome: guard.intact ? "healed" : "rejected",
+            // Provisional. A patch that clears the guard has not healed anything yet —
+            // only the re-run can say that, and it is set below. This used to be left at
+            // "healed" for every accepted patch, so the report counted a patch that was
+            // *allowed* as a test that *passed*, which is the one thing the report exists
+            // not to do.
+            outcome: guard.intact ? "escalated" : "rejected",
           };
           heals.push(record);
           emit({ type: "heal.attempted", attempt: record });
@@ -379,26 +409,50 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
             continue;
           }
 
+          // Accepted. Applying the patch is the orchestrator's act, not the Healer's:
+          // the Healer proposed, the guard cleared it, and this line is where that
+          // decision becomes a file the next run of the suite will actually execute.
+          // The diff is computed from the before/after that was checked, so the artifact
+          // and the file on disk cannot disagree.
           const path = `heal/patch-${t.testId}-${n}.diff`;
+          if (proposal.file) {
+            await writeArtifact(runId, proposal.file, proposal.after);
+            await writeArtifact(runId, path, unifiedDiff(proposal.before, proposal.after, proposal.file));
+          }
           ctx.artifact("patch", path, `Healed — ${results.get(t.testId)?.title ?? t.testId}`);
 
           const rerun = await agents.rerun(ctx, { testId: t.testId, attempt: n + 1, healed: true });
           results.set(rerun.testId, rerun);
           emit({ type: "test.result", result: rerun });
           healed = rerun.status === "healed" || rerun.status === "passed";
+          record.outcome = healed ? "healed" : "escalated";
           if (healed) break;
         }
 
         if (!healed) {
-          const last = heals.filter((h) => h.testId === t.testId).at(-1);
+          const attempts = heals.filter((h) => h.testId === t.testId);
+          const last = attempts.at(-1);
           if (last) last.outcome = "escalated";
           decide(
             "heal",
-            `Escalate ${t.testId} — ${input.options.maxHealAttemptsPerTest} heal attempts did not converge`,
-            "Repeated patches failed to make the test pass without weakening it. Escalating with the " +
-              "attempt history attached is the honest outcome; a test that only passes because it stopped " +
-              "checking anything is worse than a red one.",
-            [{ kind: "heuristic", summary: `${heals.filter((h) => h.testId === t.testId).length} attempts, none converged` }],
+            attempts.length
+              ? `Escalate ${t.testId} — ${attempts.length} heal attempt(s) did not converge`
+              : `Escalate ${t.testId} — the Healer proposed no patch`,
+            attempts.length
+              ? "Repeated patches failed to make the test pass without weakening it. Escalating with the " +
+                "attempt history attached is the honest outcome; a test that only passes because it stopped " +
+                "checking anything is worse than a red one."
+              : "The Healer declined to patch this test — the element is gone rather than moved, or the only " +
+                "available fix would have weakened what the test proves. A decline with a reason is a result: " +
+                "the test stays red and the report says why nobody could fix it.",
+            [
+              {
+                kind: "heuristic",
+                summary: attempts.length
+                  ? `${attempts.length} attempt(s), none converged`
+                  : "No patch was proposed",
+              },
+            ],
           );
         }
       }

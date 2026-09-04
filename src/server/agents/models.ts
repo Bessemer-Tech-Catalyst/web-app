@@ -94,6 +94,17 @@ export const models = {
   get generator(): ModelTier {
     return tier("ODYSSEY_MODEL_GENERATOR", "medium");
   },
+  /**
+   * Broken test or broken app. The other judgment call the product is built around, and
+   * the one whose wrong answer is most expensive: healing a real defect deletes it.
+   */
+  get classifier(): ModelTier {
+    return tier("ODYSSEY_MODEL_CLASSIFIER", "medium");
+  },
+  /** A long agentic loop that has to re-prove every locator it writes. */
+  get healer(): ModelTier {
+    return tier("ODYSSEY_MODEL_HEALER", "medium");
+  },
 };
 
 /** Prices a stage's streamed usage so the orchestrator's budget guard can act on it. */
@@ -108,5 +119,7 @@ export function describeModels() {
     planner: models.planner,
     critic: models.critic,
     generator: models.generator,
+    classifier: models.classifier,
+    healer: models.healer,
   };
 }

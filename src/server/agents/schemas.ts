@@ -174,6 +174,58 @@ export const generatedTestSchema = z.object({
 
 export type GeneratedTestOutput = z.infer<typeof generatedTestSchema>;
 
+// ---------------------------------------------------------------------------
+// Classifier (triage)
+// ---------------------------------------------------------------------------
+
+/**
+ * One failure's verdict.
+ *
+ * `agreesWithPrior` is not decoration. The classifier is handed a rule-based prior
+ * computed from the runner's own output and the generation-time locator ledger
+ * (`failure-signals.ts`), and overturning it is allowed but must be *declared* — which
+ * is what makes "the model disagreed with the rules, and here is what it saw that they
+ * could not" a line in the Decision Log rather than a silent swing in the verdict.
+ */
+export const triageSchema = z.object({
+  verdict: z.enum(["SCRIPT_DRIFT", "APP_DEFECT", "ENV_FLAKE", "PLAN_ERROR"]),
+  confidence: z.number().min(0).max(1),
+  agreesWithPrior: z.boolean(),
+  rationale: z
+    .string()
+    .describe("Two or three sentences for the engineer reading the Decision Log"),
+  evidence: z
+    .array(evidenceSchema)
+    .describe("What you observed live. Never restate the prior's facts as your own."),
+  /** Only meaningful on APP_DEFECT — otherwise ignored. */
+  bugTitle: z.string().nullable(),
+  bugSeverity: z.enum(["critical", "high", "medium", "low"]).nullable(),
+});
+
+export type TriageOutput = z.infer<typeof triageSchema>;
+
+// ---------------------------------------------------------------------------
+// Healer
+// ---------------------------------------------------------------------------
+
+/**
+ * A patch proposal — the whole file, not a diff.
+ *
+ * A model asked for a diff spends its budget getting hunk offsets right and gets them
+ * wrong; a whole file is checkable against both gates the orchestrator runs on it (the
+ * assertion-integrity guard and the locator-provenance gate), and the diff for the
+ * report is computed from before/after here rather than trusted from the model.
+ */
+export const healSchema = z.object({
+  outcome: z
+    .enum(["patch", "decline"])
+    .describe("decline when the failure is not something a locator or wait can fix"),
+  summary: z.string().describe("One line: what changed and why it should now pass"),
+  code: z.string().nullable().describe("The complete patched .spec.ts when patching; null when declining"),
+});
+
+export type HealOutput = z.infer<typeof healSchema>;
+
 export function toEvidence(items: z.infer<typeof evidenceSchema>[]): Evidence[] {
   return items.map((e) => ({
     kind: e.kind,

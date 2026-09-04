@@ -650,6 +650,14 @@ export interface HealProposal {
   summary: string;
   before: string;
   after: string;
+  /**
+   * The workspace-relative spec file the patch applies to.
+   *
+   * Absent on the fixture proposals below, which describe a heal rather than performing
+   * one. A real proposal carries it because the orchestrator — not the Healer — is what
+   * writes an accepted patch to disk, and it needs to be told where.
+   */
+  file?: string;
 }
 
 /**

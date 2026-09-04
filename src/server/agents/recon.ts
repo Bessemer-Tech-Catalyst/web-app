@@ -12,6 +12,7 @@
  */
 
 import { writeArtifact } from "../workspace";
+import { STATE_FILE, captureStorageState, carriesSession, describeStorageState } from "./storage-state";
 import { withPlaywright } from "./playwright-mcp";
 import { runStructured } from "./harness";
 import { models } from "./models";
@@ -55,8 +56,8 @@ Report:
 export async function recon(ctx: AgentContext): Promise<ReconResult> {
   const tier = models.recon;
 
-  const out = await withPlaywright(ctx.runId, ctx.input, "recon", (server) =>
-    runStructured(ctx, {
+  const out = await withPlaywright(ctx.runId, ctx.input, "recon", async (server) => {
+    const result = await runStructured(ctx, {
       as: "recon",
       name: "Recon",
       tier,
@@ -65,8 +66,32 @@ export async function recon(ctx: AgentContext): Promise<ReconResult> {
       outputType: reconSchema,
       mcpServers: [server],
       maxTurns: 60,
-    }),
-  );
+    });
+
+    // The session hand-off, taken here because *this* is the browser that performed the
+    // login and it is still open. Every later agent is seeded from the file this writes.
+    // Leaving it to the shared on-disk profile was a race with Chrome's lazy cookie
+    // flush: `run_0c3d41d1` had Recon report an authenticated crawl of four routes and
+    // the Generator, two stages later, quarantine every scenario for being signed out.
+    const state = await captureStorageState(ctx.runId, ctx.input.url, server);
+    if (state && carriesSession(state)) {
+      ctx.tool("recon", "browser_storage_state", describeStorageState(state));
+    } else {
+      ctx.tool(
+        "recon",
+        "browser_storage_state",
+        state
+          ? `Captured nothing at ${ctx.input.url}: 0 cookies and 0 localStorage entries. ` +
+              (ctx.input.credentials
+                ? "Credentials were supplied, so the agents after this one will browse signed out."
+                : "No credentials were supplied, so this is expected.")
+          : `Could not read ${STATE_FILE}; the agents after this one fall back to the shared profile.`,
+        // Only a failure when there was a session to lose.
+        !ctx.input.credentials,
+      );
+    }
+    return result;
+  });
 
   const result: ReconResult = {
     routes: dedupe(out.routes),
@@ -85,17 +110,10 @@ export async function recon(ctx: AgentContext): Promise<ReconResult> {
   );
 
   // Recon does not write a seed spec. It used to, and the spec it wrote was a lie: it
-  // navigated to "/" and saved storage state without ever logging in, nothing executed
-  // it, and the `results/state.json` the rest of the code claimed to read never existed.
-  //
-  // The Planner and Generator get Recon's session from the shared browser profile
-  // instead (see `profileDir`), which needs no file and no extra execution step.
-  //
-  // A real seed spec is still owed to Phase 4: the *generated suite* runs under
-  // `playwright test`, which cannot use a Chrome user-data-dir and needs a
-  // `storageState` file. Writing that spec means reproducing the login as Playwright
-  // code, which is the Generator's job — it is the only agent that proves locators
-  // against the live page — so it belongs there, not here.
+  // navigated to "/" and saved storage state without ever logging in, and nothing
+  // executed it. What replaced it is the capture above: a `storageState` file dumped out
+  // of the browser that actually logged in, which is what both the later agents and
+  // `playwright test` need, and which needs no extra execution step at all.
 
   return result;
 }

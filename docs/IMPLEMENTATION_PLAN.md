@@ -319,8 +319,8 @@ most of the *"how clearly does the team present the agent's decisions"* 15%.
 | **2** ✅ | Orchestrator FSM + real SSE + run store + workspace scaffolder. Agents still deterministic stubs | A real run row persists; UI streams from `events.ndjson`, not mocks; crash/reload resumes |
 | **3** ✅ | Recon + Planner (`@openai/agents` + Playwright MCP) + Coverage Critic + replan loop | **Met against a live app.** Recon signed in unaided and crawled 11 authenticated routes; the Critic scored 62, named 7 gaps, and the revision passed at 82. See §10. |
 | **4** ✅ | Generator w/ live selector validation + executor (`playwright test --reporter=json`) | **Met.** `run_7408ff5f`: 2 tests emitted at 14/14 and 20/20 proven locators, executed green — `expected: 2, unexpected: 0`. See §12. Shard parallelism was *not* built — there is no `--shard` anywhere. Parallelism is worker-based and a watched run forces `workers: 1`, so fan-out and the headed-browser invariant are in direct conflict, and watching won. |
-| **5** ◀ *now* | Triage/classifier + Healer + assertion-integrity guard + bounded re-execute | A deliberately broken selector gets healed; a deliberately broken app gets filed as a bug, *not* healed |
-| **6** | Report synthesis, PRD gap analysis, risk ledger, artifact viewer (trace/video/screenshot) | The report answers all six must-have bullets |
+| **5** ✅ | Triage/classifier + Healer + assertion-integrity guard + bounded re-execute | **Met by `run_8b37144b`.** A renamed control was classified SCRIPT_DRIFT and healed; a 500 was classified APP_DEFECT at 0.94, filed as a bug and left red. See §13.7. |
+| **6** ◀ *now* | Report synthesis, PRD gap analysis, risk ledger, artifact viewer (trace/video/screenshot) | The report answers all six must-have bullets |
 | **7** | Replay mode, demo script, README, architecture diagram, deck, video | Rehearsed 4-minute demo that cannot fail |
 
 Phase 1 is scoped so that phases 2–6 never touch the UI layer again.
@@ -492,12 +492,12 @@ replaced it is shaped the way it is.
       `maxReplans: 0`. The 62–68 range was measured on the clinic app, which is a harder target.
       **Run the demo at `maxReplans: 2`** remains the advice.
 
-### Not started, and not in any phase
+### ~~Not started, and not in any phase~~ — built in Phase 5
 
-- [ ] **The demo target with the feature-flagged deliberate bug.** The only way to trigger
-      `APP_DEFECT` on command, which is the strongest moment in the demo. Needed the moment the
-      Healer is real in Phase 5. §7 has called it non-negotiable since Phase 0 and it still has no
-      phase, no owner and no line in the table above — which is how it will fail to exist.
+- [x] **The demo target with the feature-flagged deliberate bug.** Built: **ShopLite**, at
+      `/shoplite`, with two switches on `/shoplite/control` (§13.3). It stopped being a nice-to-have
+      the moment the Healer became real, because Phase 5's exit criterion is a sentence about an
+      application that can be broken on command and there was no such application.
 
 ---
 
@@ -594,3 +594,210 @@ with a read-only target; it does not resolve them.
 `executor.ts` for exactly one reason: `executor.ts` cannot be loaded outside Next, so a test of it
 could only ever be a *copy* of it. The copy is what the previous version of this test was, with a
 comment admitting it could drift.
+
+---
+
+## 13. Phase 5 — Triage, the Healer, and a target that can be broken on command
+
+**Status: done, and proven by an orchestrated run** — `run_8b37144b`, §13.7. That run also
+exposed two defects and one architectural mismatch that no amount of reading had, which is the
+fourth phase in a row where that has been true.
+
+`triage`, `proposeHeal` and `rerun` are real in `agents/index.ts` and reachable through
+`ODYSSEY_REAL_AGENTS`. The FSM around them did not change shape: it already routed
+`APP_DEFECT` away from the Healer and ran the assertion guard on every patch. What changed is
+that the three things it was routing are no longer deterministic stand-ins.
+
+### 13.1 The classifier is two layers, and the seam is the point
+
+Defect classification is the brief's Bonus item and the easiest thing in this project to fake: a
+model handed an error string will answer "script" or "app" fluently, and nothing about the answer
+is checkable. So the verdict is produced in two layers that can disagree in public.
+
+**The prior** (`agents/failure-signals.ts`) is a rule table over two inputs neither the model nor
+anyone else can argue with: Playwright's own error text, and the generation-time locator ledger.
+The error text already contains most of the classification — *the element was never found* and
+*the element was found and held the wrong value* are different verdicts and Playwright says which
+happened. The ledger supplies the other half: a locator that Playwright itself handed us twenty
+minutes ago and cannot find now is drift; one that never resolved was never evidence. The prior is
+reproducible, costs nothing, and is deliberately capped below 0.75 — it has read a string, not
+looked at an application. A unit test pins that cap.
+
+**The live pass** gives the classifier a read-only browser (`CLASSIFIER_TOOLS` — no click, no
+type) and the two tools that see what the error text cannot: `browser_console_messages` and
+`browser_network_requests`. It may overturn the prior; it may not do so quietly. `agreesWithPrior`
+is part of its structured output, an overruling that cites live evidence keeps most of its
+confidence, and **an overruling that cites nothing is damped to ≤0.45 and says so in its own
+rationale**. That damping is the honest version of "the model disagreed", and it is visible in the
+Decision Log rather than folded into a number.
+
+Bug titles now come from the classifier that found the defect rather than from a template. The
+orchestrator files what was diagnosed; inventing a description of a bug nothing diagnosed was the
+`fixtures.ts` failure mode of Phase 3, in a new costume.
+
+### 13.2 The Healer is held to the Generator's rule
+
+Three constraints, all enforced outside the model:
+
+1. **The assertion-integrity guard** (unchanged, `orchestrator/assertion-guard.ts`) — syntactic,
+   so it cannot be argued out of.
+2. **Locator provenance, applied to the patch.** Every locator the patch *introduces* must have
+   been resolved on the live page during the healing session, checked by the same `prove()` the
+   Generator's gate uses. Locators the file already carried are exempt: they were proven when the
+   test was written, and re-proving them would spend a browser walk re-deriving the record. A
+   healer allowed to guess is a slower way of writing a red test.
+3. **Bounded attempts**, with a decline treated as a result. "The Healer proposed no patch" and
+   "three patches did not converge" are different escalations and the Decision Log now says which.
+
+An `ENV_FLAKE` is **retried before it is patched**. A retry costs one test run and settles the
+question; patching a test that was only ever slow bakes a workaround into the suite for a problem
+that does not exist.
+
+Applying an accepted patch is the *orchestrator's* act, not the Healer's — the Healer returns
+before/after, the guard clears it, and `run.ts` writes the file and the diff. The diff is computed
+from the same before/after that was checked (`orchestrator/patch.ts`), so the artifact and the
+file that will actually run cannot disagree.
+
+### 13.3 ShopLite — the target the exit criterion needs
+
+Phase 5's exit criterion is a sentence about an application that can be broken on command, and
+until now there was no such application. **ShopLite** is one: `/shoplite`, four products, a
+session cookie, a basket, checkout and order history. Two switches on `/shoplite/control`, held in
+a file so they survive a dev-server reload and can be flipped *between two stages of a live run*:
+
+| Switch | What breaks | Correct verdict |
+|---|---|---|
+| `drift` | "Add to cart" becomes "Add to bag" — the accessible name, which is what `getByRole` matches | `SCRIPT_DRIFT` → heal |
+| `defect` | `GET /api/shoplite/orders` answers 500; the order is still placed, the history cannot render | `APP_DEFECT` → file a bug, withhold the Healer |
+
+Both are diagnosable by a browser that only *looks*: the renamed control is in the accessibility
+snapshot, and the 500 is in the network log and the console of a plain page load. That is not a
+coincidence — the classifier is read-only by allowlist, so a defect reachable only by clicking
+would be a defect it could not classify.
+
+One deliberate design choice: **the basket lives in `sessionStorage`, the session in a cookie.**
+Playwright's `storageState` carries cookies and `localStorage` and not `sessionStorage`, so the
+generated suite inherits the login and *not* the shopping the Generator did while proving
+locators. That is a concrete answer to §12.3 — not a fix for the general case, but an example of
+an application that does not have the problem, which is worth being able to point at on stage.
+
+Verified in a real browser, not by reading: sign-in rejects a bad password with the message the
+page renders, the basket totals £84.00 for 2 × £42.00, the order appears in history by id, a fresh
+context built from the captured `storageState` is signed in with an **empty** basket, and each
+switch produces exactly the failure shape it promises.
+
+### 13.4 The run that closed the phase
+
+```bash
+pnpm dev --port 3002
+# 1. Healthy ShopLite. Let the pipeline plan, generate and execute green.
+curl -sS -X POST localhost:3002/api/runs -H 'content-type: application/json' -d '{
+ "url":"http://localhost:3002/shoplite",
+ "credentials":{"username":"ada@shoplite.test","password":"lovelace"},
+ "options":{"maxScenarios":3,"maxReplans":1,"budgetUsd":0.60}
+}'
+# 2. Then, on a second run, break it first and watch what the classifier does:
+curl -sS -X POST localhost:3002/api/shoplite/flags -H 'content-type: application/json' \
+  -d '{"drift":true}'    # expect SCRIPT_DRIFT → heal
+curl -sS -X POST localhost:3002/api/shoplite/flags -H 'content-type: application/json' \
+  -d '{"defect":true}'   # expect APP_DEFECT → bug filed, Healer withheld
+```
+
+### 13.5 Tests
+
+`pnpm test` — 40 assertions, ~0.5s, no API and no browser. New in this phase:
+
+- `agents/failure-signals.test.mts` — the prior. Every Playwright error shape gets a case, because
+  a parse that stops recognising one silently turns a confident verdict into the weak fallback.
+  The case that matters most is an assertion failure on a *proven* locator: that is the one that
+  says `APP_DEFECT`, and `APP_DEFECT` is the verdict that files a bug and withholds the Healer.
+  One test asserts the property rather than an example — **no prior, for any input, claims more
+  than 0.75.**
+- `orchestrator/patch.test.mts` — the heal diff, which is the artifact a person reviews a heal by.
+  A diff that drops or invents a changed line would let a patch read as something it is not.
+
+### 13.6 What the closing run showed — `run_8b37144b`
+
+Against a local ShopLite, three scenarios, both switches flipped **between GENERATE and EXECUTE**
+so the suite was written against a healthy application and run against a broken one. That is the
+situation a real team is in every morning, and it is the only way to test the classifier honestly:
+generate against a broken app and there is nothing to misclassify.
+
+| | |
+|---|---|
+| Plan | critique **72 → 80** after one re-plan, accepted |
+| Generated | **3 tests, 0 quarantined** — provenance 5/5, 24/24, 5/5 |
+| Executed | 3 failed, which was the point |
+| Classified | `APP_DEFECT` 0.94 · `SCRIPT_DRIFT` 0.61 · `ENV_FLAKE` 0.70 |
+| Healed | 1 (the drift), 1 escalated by the assertion guard, 1 left red as a filed bug |
+| Cost | **$0.161** |
+
+**The classifier got all three right, and the two layers earned their keep on two of them.**
+
+- *The 500.* Prior: `APP_DEFECT` from an assertion failure on a locator proven at generation time.
+  The live pass agreed and raised it to **0.94**, citing the 500 and the console line, and wrote
+  the bug title itself: *"Authenticated order history fails with exhausted connection pool."* The
+  Healer was withheld and the test stayed red — the outcome the whole design exists to produce.
+- *The renamed control.* Prior: `ENV_FLAKE` at 0.4, because the runner reported a bare 90-second
+  test timeout and named no locator — the rules had nothing to work with. The live pass overturned
+  it to `SCRIPT_DRIFT`, citing what it saw: *"the product controls are labeled 'Add to bag'."*
+  That is the seam working in the direction it was built for: a weak prior, overturned on a live
+  observation, published as an `overrule_prior` event rather than a silent swing.
+- *The flake.* Retried once before any patch, per §13.2. It reproduced, so it was not a flake and
+  fell through to the Healer — which is the fallthrough working, not a misprediction being papered
+  over.
+
+**The assertion-integrity guard rejected a real patch, unprompted.** On its second attempt at the
+sign-in test the Healer summarised its own work as *"extended timeouts … without changing any
+assertions"* and the syntactic diff found that it had. Patch rejected, test escalated. The guard
+has existed since Phase 2 and this is the first time anything has actually tried to get past it.
+
+**The heal that worked** is one line, and it is the whole pitch in a diff:
+
+```diff
+-  await page.getByRole("link", { name: "Basket" }).click();
++  await page.getByRole("link", { name: "Bag" }).click();
+```
+
+`getByRole("link", { name: "Bag" })` was resolved on the live page during the heal — the Healer is
+held to the Generator's rule and the run recorded *"all 1 new locator(s) in the patch were resolved
+on the live page"*. Every assertion in the file is untouched. The re-run went green and the test is
+reported `healed`, which is a different fact from `passed` and counted separately.
+
+### 13.7 Three things the run found that reading had not
+
+1. **The auth hand-off was racing Chrome's disk flush.** *(Fixed.)* The session passed from Recon
+   to the later agents through the shared `--user-data-dir`, and **Chrome writes its cookie store
+   to disk lazily**. `run_1ad8602e` won that race; `run_0c3d41d1`, on identical code, lost it —
+   Recon reported an authenticated crawl of four routes and the Generator, two stages later,
+   quarantined all three scenarios because it could not sign in. The symptom points at the target,
+   the cause was ours, and on a cookie-only application it was a coin flip every run.
+
+   The hand-off is now explicit: Recon dumps the session to `results/state.json` **while its own
+   browser is still open**, and every agent after it runs `--isolated --storage-state <that file>`.
+   A capture that comes back empty no longer overwrites a good one. The profile remains the path
+   for Recon and the fallback for an anonymous run. `run_8b37144b` shows the fix working —
+   *"results/state.json — 1 cookie(s)"* at the end of recon, and the Generator opening signed in.
+
+   This also retires the note in `playwright-mcp.ts` about concurrent agents needing "a profile per
+   agent plus an explicit state hand-off". That is now what this is.
+
+2. **An accepted patch was reported as a healed test.** *(Fixed.)* `HealAttempt.outcome` was set to
+   `"healed"` the moment the assertion guard passed, before the re-run had said anything. The
+   sign-in test's first attempt is in the report as `healed` while the test was still red. The
+   outcome is now provisional until the re-run answers.
+
+3. **A signed-out scenario cannot be tested by a suite that ships a signed-in session.**
+   *(Addressed in the Generator's prompt; not yet re-verified by a run.)* The Generator signed out
+   to prove the rejected-credentials flow and wrote a test asserting that `/shoplite/products`
+   shows the sign-in heading. The suite runs with the captured `storageState`, so it is signed in,
+   the products page renders products, and the test fails on every assertion — for a reason that
+   is neither the script's fault nor the application's. The classifier called it `ENV_FLAKE` at
+   0.70, which is wrong in an interesting way: it navigated to the page, saw the heading, and had
+   no way to know the suite would arrive holding a session it did not.
+
+   The Generator is now told that a scenario about signed-out behaviour must drop the session for
+   itself with `test.use({ storageState: { cookies: [], origins: [] } })`. The deeper point is
+   worth keeping: **state variance is a first-class property of a test suite**, and one captured
+   session per run is an assumption the Planner is free to violate — it was told to cover
+   state-variants and it did exactly that.

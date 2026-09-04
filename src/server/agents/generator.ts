@@ -35,7 +35,13 @@ import { runStructured } from "./harness";
 import { models } from "./models";
 import { generatedTestSchema, type GeneratedTestOutput } from "./schemas";
 import { harvest, prove } from "./locator-provenance";
-import { STATE_FILE, captureStorageState, describeStorageState } from "./storage-state";
+import {
+  STATE_FILE,
+  captureStorageState,
+  carriesSession,
+  describeStorageState,
+  readStorageState,
+} from "./storage-state";
 import type { AgentContext, GenerateResult, ReconResult } from "../orchestrator/agents";
 import type { GeneratedTest, Scenario } from "@/lib/types";
 
@@ -106,6 +112,14 @@ THE FILE
 - Exactly one test() call, titled with the scenario's title.
 - The browser starts signed in and baseURL is configured: navigate with relative paths
   like page.goto("/settings"). Never write sign-in steps and never hardcode the origin.
+- UNLESS the scenario is about signed-out behaviour — rejected credentials, a protected
+  route redirecting, what an anonymous visitor sees. The suite ships one signed-in
+  session, so a test that merely navigates to the login page while holding it is testing
+  the signed-in application and will fail on every assertion about being signed out. Such
+  a test must drop the session for itself, on the line after the imports:
+      test.use({ storageState: { cookies: [], origins: [] } });
+  Write that only when the scenario genuinely requires an anonymous session, and then
+  write the sign-in steps the scenario needs, since there is no session to inherit.
 - Assert the scenario's expected outcome, specifically enough to fail when it is wrong.
   A test that only asserts the page loaded proves nothing.
 - Use web-first assertions — expect(locator).toBeVisible(), .toHaveText(), .toHaveURL().
@@ -146,8 +160,15 @@ export async function generate(
           "cannot use a Chrome user-data-dir, so the suite needs its own storage-state file.",
       );
 
-      const state = await captureStorageState(ctx.runId, ctx.input.url, server);
-      if (state && (state.cookies > 0 || state.localStorageKeys > 0)) {
+      // Re-dumped here rather than reused from Recon because this browser has been
+      // signed in for the whole generate stage: a token Recon captured an hour of agent
+      // work ago may have been rotated since, and the suite runs from this file. A
+      // capture that comes back empty does not overwrite Recon's (see `storage-state.ts`),
+      // so the fallback below is a real session and not a stale husk.
+      const captured = await captureStorageState(ctx.runId, ctx.input.url, server);
+      const state = captured && carriesSession(captured) ? captured : await readStorageState(ctx.runId);
+
+      if (state && carriesSession(state)) {
         ctx.tool("generator", "browser_storage_state", describeStorageState(state));
         await writePlaywrightConfig(ctx.runId, ctx.input, { storageState: STATE_FILE });
         ctx.artifact("plan", "playwright.config.ts", "Suite config — signed-in storage state");
@@ -159,8 +180,9 @@ export async function generate(
         ctx.tool(
           "generator",
           "browser_storage_state",
-          state
-            ? `Captured nothing: 0 cookies and 0 localStorage entries at ${ctx.input.url}. ` +
+          captured
+            ? `Captured nothing: 0 cookies and 0 localStorage entries at ${ctx.input.url}, and ` +
+                "no session was on file from Recon either. " +
                 (recon?.authenticated
                   ? "Recon reported an authenticated session, so the suite will run logged out."
                   : "No session was established for this run.")
@@ -184,7 +206,7 @@ export async function generate(
               `Not attempted: the run passed its $${ctx.input.options.budgetUsd.toFixed(2)} budget ` +
               "ceiling before this scenario started.";
             quarantined.push({ scenarioId: held.id, title: held.title, reason });
-            provenance.push({ scenarioId: held.id, outcome: "not-attempted-over-budget", reason, ledger: [] });
+            provenance.push({ scenarioId: held.id, title: held.title, outcome: "not-attempted-over-budget", reason, ledger: [] });
           }
           ctx.tool(
             "generator",
@@ -237,6 +259,7 @@ export async function generate(
           ctx.tool("generator", "quarantine", `${scenario.title} — ${reason}`, false);
           provenance.push({
             scenarioId: scenario.id,
+            title: scenario.title,
             outcome: "quarantined-by-error",
             reason,
             ledger: [...ledger],
@@ -249,7 +272,7 @@ export async function generate(
         if (out.outcome === "quarantine" || !out.code?.trim()) {
           quarantined.push({ scenarioId: scenario.id, title: scenario.title, reason: reasonOf(out.reason) });
           ctx.tool("generator", "quarantine", `${scenario.title} — ${reasonOf(out.reason)}`, false);
-          provenance.push({ scenarioId: scenario.id, outcome: "quarantined-by-agent", reason: reasonOf(out.reason), ledger: [...ledger] });
+          provenance.push({ scenarioId: scenario.id, title: scenario.title, outcome: "quarantined-by-agent", reason: reasonOf(out.reason), ledger: [...ledger] });
           continue;
         }
 
@@ -267,7 +290,7 @@ export async function generate(
                 ". Emitting them would be guessing.";
           quarantined.push({ scenarioId: scenario.id, title: scenario.title, reason });
           ctx.tool("generator", "verify_locator_provenance", `${scenario.title} — ${reason}`, false);
-          provenance.push({ scenarioId: scenario.id, outcome: "quarantined-by-gate", proof, ledger: [...ledger] });
+          provenance.push({ scenarioId: scenario.id, title: scenario.title, outcome: "quarantined-by-gate", proof, ledger: [...ledger] });
           continue;
         }
 
@@ -287,7 +310,7 @@ export async function generate(
           `${file} — ${proof.verified}/${proof.total} locators resolved on the live page`,
         );
         ctx.artifact("test", file, scenario.title);
-        provenance.push({ scenarioId: scenario.id, outcome: "emitted", file, proof, ledger: [...ledger] });
+        provenance.push({ scenarioId: scenario.id, title: scenario.title, outcome: "emitted", file, proof, ledger: [...ledger] });
       }
     });
   } finally {

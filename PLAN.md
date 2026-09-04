@@ -202,9 +202,9 @@ so it's a swap, not a rewrite.
 | 1 | The UI — both screens, fully working, driven by a realistic fake run | ✅ done |
 | 2 | The orchestrator state machine + real live streaming + saved runs | ✅ done |
 | 3 | Recon + Planner + the Coverage Critic (real browser, real model) | ✅ **done and verified against a live app** |
-| **4** | Generator with live selector proving + parallel test execution | ◀ **next** |
-| 5 | Triage + Healer + the assertion guard | |
-| 6 | Final report, PRD gap analysis, risk ledger, screenshot/video viewer | |
+| 4 | Generator with live selector proving + parallel test execution | ✅ **done and verified by a green live run** |
+| 5 | Triage + Healer + the assertion guard | ✅ **done — a live run healed a drift and refused to heal a real bug** |
+| **6** | Final report, PRD gap analysis, risk ledger, screenshot/video viewer | ◀ **next** |
 | 7 | Demo rehearsal, README, architecture diagram, deck, video | |
 
 Phase 3 was marked done once before it had ever run. It had not, and running it found four
@@ -231,8 +231,64 @@ So when phase 2 plugs in the real engine, **the UI doesn't change at all.** No r
 
 ## Where we are
 
-**Phases 1–4 are done, and both have been run against live applications** — not a fixture, not a
-stub: a real authenticated SaaS app and a real public one, with a real key, in a real browser.
+**Phases 1–5 are done and every one of them was run against a live application** — not a fixture,
+not a stub: a real authenticated SaaS app, a real public one, and our own shop, with a real key, in
+a real browser.
+
+### Phase 5: it told a broken test from a broken app, live
+
+`run_8b37144b` is the run that closes it. Three tests generated against a **healthy** ShopLite,
+then both switches flipped **between generation and execution** — so the suite was written against
+a working app and run against a broken one, which is where every real team lives.
+
+| The failure | What it decided | What it did |
+|---|---|---|
+| Order history empty | **APP_DEFECT, 0.94** — it read the 500 and the console line | Filed *"Authenticated order history fails with exhausted connection pool"*. **Healer withheld. Test left red.** |
+| 90-second timeout, no locator named | Prior said flake; the live look found the button now says **"Add to bag"** → **SCRIPT_DRIFT** | Healed, one line, re-run green |
+| Sign-in test red | **ENV_FLAKE, 0.70** | Retried once first, reproduced, went to the Healer — which then tried to weaken an assertion and **got caught** |
+
+Three moments from that run are the demo:
+
+1. **It named the bug itself.** Not "test 3 failed" — *"Authenticated order history fails with
+   exhausted connection pool"*, from a 500 and a console line it went and read. And then it
+   **refused to heal it**.
+2. **The prior was wrong and the browser corrected it, in public.** The runner reported a bare
+   timeout naming no locator, so the rules could only guess "flake". The classifier went and looked,
+   found the renamed control, and overturned its own prior — logged as a decision, not a silent
+   swing.
+3. **The assertion guard caught the Healer red-handed.** Its patch summary said "without changing
+   any assertions". The diff said otherwise. Patch rejected, test escalated. Nobody staged that.
+
+The three ideas behind it:
+
+- **The classifier cannot bluff.** Every failure gets a *rule-based prior* first, computed from
+  Playwright's own error text and from the record of which locators resolved on the live page at
+  generation time. The model then looks at the application with a **read-only** browser — it can
+  read the console and the network log, it cannot click — and may overturn the prior. If it
+  overturns it **without citing anything it saw live, its confidence is damped to 0.45 and the
+  report says why.** That is the difference between a classifier and a coin flip with a rationale.
+- **The healer is held to the generator's rule.** Every locator its patch *introduces* must have
+  been resolved on the live page during the heal. Plus the assertion guard, which was already
+  there: it may rewrite locators and waits, never what the test proves.
+- **A flake is retried before it is patched.** One test run settles whether there was ever
+  anything to heal.
+
+Cost of that entire run, recon to report: **$0.16.**
+
+**And we can now break an app on command.** `ShopLite` (`/shoplite`) is our own demo target with
+two switches: one renames a button — a perfectly healthy app that a proven locator no longer
+matches — and one makes order history return a 500 while the order itself still saves. Those are
+the two verdicts, on demand, live. It also quietly solves the side-effect problem from Phase 4: its
+basket lives in `sessionStorage`, which `storageState` does not carry, so the suite inherits the
+login and not the agents' shopping.
+
+**What that run also found — the part worth telling judges.** It caught three of our own defects,
+which is why we run things instead of reading them. The worst was that **the auth hand-off was
+racing Chrome's cookie flush**: the session passed between agents through a shared browser profile,
+Chrome writes that profile to disk lazily, and on one run the Generator opened it signed out and
+quarantined every scenario — reporting a target problem that was entirely ours. Recon now dumps the
+session to a file while its own browser is still open and every later agent is seeded from it. Full
+account in §13.7 of the implementation plan.
 
 ### Phase 4: the pipeline writes tests that pass
 
@@ -315,8 +371,20 @@ of the code that replaced it.
   scenario — `run_7408ff5f` finished at $0.317 against a $0.30 ceiling. Set the ceiling below the
   number you actually mean.
 
-**Not started, and not in any phase**
+**Closed in Phase 5**
 
-- **The demo target app with the feature-flagged deliberate bug.** It is the only way to trigger
-  `APP_DEFECT` on command, which is the strongest single moment in the demo. It is needed the
-  moment the Healer is real in Phase 5, and unscheduled work does not get built.
+- ~~**The demo target app with the feature-flagged deliberate bug.**~~ Built: ShopLite, above. It
+  had been called non-negotiable since Phase 0 while having no phase and no owner, which is how
+  work fails to exist.
+
+**Open**
+
+- **A signed-out scenario cannot be tested by a suite that ships one signed-in session.** The
+  Planner is told to cover state variants and does; the Generator then writes a test asserting a
+  protected route redirects to sign-in, and the suite arrives holding a session, so it fails for a
+  reason that is neither the script's fault nor the app's. The Generator is now told to drop the
+  session for such a test; that fix has not yet been through a run.
+- **The storage-state hand-off still carries the agents' own side effects into the suite** on any
+  target that persists them. ShopLite shows what an application immune to it looks like — its
+  basket lives in `sessionStorage`, which `storageState` does not carry — which is a demonstration,
+  not a fix.
