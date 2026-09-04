@@ -11,6 +11,7 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { appendEvent, readEvents, redact } from "./event-log";
+import { selectAgents } from "./agents";
 import { runOrchestrator } from "./orchestrator/run";
 import { DATA_DIR, INDEX_FILE, eventsFile, isValidRunId, runPath } from "./paths";
 import { scaffoldWorkspace } from "./workspace";
@@ -112,11 +113,29 @@ export async function createRun(input: RunInput): Promise<{ id: string }> {
 async function drive(run: LiveRun) {
   const emit = (init: OrchestratorEventInit) => publish(run, init);
   try {
+    // Which stages run for real is a per-run decision (see ./agents). It is announced
+    // in the event log rather than only logged, so a replayed run says plainly which of
+    // its stages were stubbed — a report is worthless if you cannot tell.
+    const { agents, real, notes } = selectAgents();
+    emit({
+      type: "agent.tool",
+      agent: "orchestrator",
+      tool: "select_agents",
+      summary: real.length
+        ? `Live agents: ${real.join(", ")}. Remaining stages stubbed.`
+        : "Every stage stubbed — no live agents selected.",
+      ok: true,
+    });
+    for (const note of notes) {
+      emit({ type: "error", stage: "recon", message: note, recoverable: true });
+    }
+
     run.status = await runOrchestrator({
       runId: run.id,
       input: run.input,
       emit,
       signal: run.controller.signal,
+      agents,
     });
   } catch (err) {
     if (run.controller.signal.aborted) {

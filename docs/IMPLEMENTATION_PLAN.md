@@ -252,6 +252,21 @@ Settings, so we can downshift a tier if we're burning credits during dev. The Ag
 `maxBudgetUsd`, so the orchestrator enforces the budget itself from streamed `usage` — that guard
 already exists and already trips (see §6, Phase 2).
 
+**Pinned in Phase 3.** `models.ts` now holds real ids. The table above describes the *production*
+setting; the committed defaults are deliberately the cheapest tier instead — `gpt-5.6-luna`, effort
+`low`/`medium` — because Phase 3 is a build-and-iterate phase and frontier-model burn on every churn
+buys nothing. Reaching the table above is an environment change, not a code change:
+
+| Variable | Effect |
+|---|---|
+| `ODYSSEY_MODEL` | Every agent |
+| `ODYSSEY_MODEL_RECON` / `_PLANNER` / `_CRITIC` | One agent; wins over `ODYSSEY_MODEL` |
+| `<any of the above>_EFFORT` | Reasoning effort: `none` … `max` |
+
+Available ids at time of pinning: `gpt-6-astra` (strongest), `gpt-5.6-sol`, `gpt-5.6-terra`,
+`gpt-5.6-luna` (cheapest). `models.ts` carries each one's published per-token price, because a
+pinned id with a stale price silently lies to the budget guard.
+
 ---
 
 ## 5. Event model (the UI/orchestrator contract)
@@ -295,7 +310,7 @@ most of the *"how clearly does the team present the agent's decisions"* 15%.
 | **0** ✅ | Research + this plan + `PLAN.md` | done |
 | **1** ✅ | **UI shell.** Next.js scaffold, design system, `types.ts`, launcher page, mission-control page, report page, mock event emitter driving the whole thing | `pnpm dev` → enter a URL → watch a full fake pipeline stream, end to end, looking real |
 | **2** ✅ | Orchestrator FSM + real SSE + run store + workspace scaffolder. Agents still deterministic stubs | A real run row persists; UI streams from `events.ndjson`, not mocks; crash/reload resumes |
-| **3** ◀ *now* | Recon + Planner (`@openai/agents` + Playwright MCP) + Coverage Critic + replan loop | Real `specs/*.md` from a real URL; a real critic verdict; a visible replan |
+| **3** ◀ *now* | Recon + Planner (`@openai/agents` + Playwright MCP) + Coverage Critic + replan loop | Real `specs/*.md` from a real URL; a real critic verdict; a visible replan — **built, not yet exercised against a live key** |
 | **4** | Generator w/ live selector validation + executor (`playwright test --reporter=json`) + shard parallelism | Real green tests on the demo target |
 | **5** | Triage/classifier + Healer + assertion-integrity guard + bounded re-execute | A deliberately broken selector gets healed; a deliberately broken app gets filed as a bug, *not* healed |
 | **6** | Report synthesis, PRD gap analysis, risk ledger, artifact viewer (trace/video/screenshot) | The report answers all six must-have bullets |
@@ -354,10 +369,18 @@ Accessibility + responsive from the start; judges will watch on a projector at o
 
 ## 9. Open questions to resolve before Phase 3
 
-- [ ] Do we run Playwright MCP as one long-lived server per run (`--port`, HTTP) or stdio per
-      sub-agent? Long-lived + `--isolated` is likely right so Recon's auth state carries to Planner.
-- [ ] Credential handling: env-var reference vs. encrypted-at-rest in `input.json`. Never log them —
-      add a redaction pass on the event writer *before* Phase 3.
+- [x] Do we run Playwright MCP as one long-lived server per run (`--port`, HTTP) or stdio per
+      sub-agent? **Resolved in Phase 3: stdio, one server per agent invocation, `--isolated`.** The
+      hunch above was half right — `--isolated` is correct, but a server per *run* was not, because
+      the tool allowlist is per-agent and a shared server cannot hold two different ones. Recon
+      writes `results/state.json` via the seed spec, so auth state carries forward as a file rather
+      than as a live process, which also survives a resume.
+- [x] Credential handling: env-var reference vs. encrypted-at-rest in `input.json`. Never log them —
+      add a redaction pass on the event writer *before* Phase 3. **Resolved:** the redaction pass
+      exists and Phase 3 routes every agent prompt and tool summary through it. Target credentials
+      stay out of `input.json` entirely; the provider key is read only in
+      `src/server/agents/openai.ts`, is added to the redaction set, and the Playwright child process
+      is spawned with a deliberately minimal env so it never sees it.
 - [ ] Parallel execution: Playwright `--shard` (simple) vs. our own worker pool (more control over
       per-flow isolation). Start with `--shard`, `fullyParallel: true`.
 - [ ] PRD ingestion: PDF parsing needed, or paste-as-markdown only for the demo? Start with paste
