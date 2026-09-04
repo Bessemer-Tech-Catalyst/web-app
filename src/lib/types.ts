@@ -107,7 +107,10 @@ export const DEFAULT_RUN_OPTIONS: RunOptions = {
   maxReplans: 2,
   maxHealAttemptsPerTest: 2,
   parallelWorkers: 4,
-  headless: true,
+  // Headed by default: watching the agent drive the app is most of what makes this
+  // legible to someone who has not read the event log. Set to true for CI, where a
+  // window is a liability rather than the point.
+  headless: false,
   budgetUsd: 5,
 };
 

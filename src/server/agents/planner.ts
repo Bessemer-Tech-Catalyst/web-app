@@ -48,7 +48,21 @@ What a good plan looks like:
 
 Scenario ids are stable slugs, lowercase and hyphenated, derived from the flow and the
 case — "checkout-expired-card", not "scenario-7". If you are revising a plan, a
-scenario that survives keeps the id it had.`;
+scenario that survives keeps the id it had.
+
+When revising against critic directives the scenario budget is binding, and it will
+usually already be full. Dropping a scenario to make room for a directive is a
+regression, not a trade: the critic scores the plan you hand back, sees the coverage you
+removed, and raises it as a fresh gap — so a revision that swaps five scenarios for five
+others scores the same twice and burns a re-plan cycle for nothing. Therefore:
+
+- Remove a scenario only when it is genuinely redundant with another in your revision,
+  never merely to free a slot.
+- Prefer widening an existing scenario over adding a new one. A scenario that already
+  visits a page can assert one more thing about it, and that costs no budget.
+- If the directives still do not fit, close them in severity order and leave the rest
+  open. Unclosed gaps are carried into a risk ledger and reported honestly; deleted
+  coverage is not, and is strictly worse.`;
 
 export async function plan(ctx: AgentContext, req: PlanRequest): Promise<Scenario[]> {
   const tier = models.planner;
@@ -68,7 +82,7 @@ export async function plan(ctx: AgentContext, req: PlanRequest): Promise<Scenari
     }),
   );
 
-  const scenarios = capped(toScenarios(out), ctx.input.options.maxScenarios);
+  const scenarios = capped(ctx, toScenarios(out), ctx.input.options.maxScenarios);
 
   const path = await writeArtifact(
     ctx.runId,
@@ -118,7 +132,10 @@ async function buildInput(ctx: AgentContext, req: PlanRequest): Promise<string> 
   if (req.attempt > 1 && req.previous) {
     lines.push(
       "",
-      `This is revision ${req.attempt}. Your previous plan is below. Keep the scenarios that stand, keep their ids, and add scenarios that close the directives that follow.`,
+      `This is revision ${req.attempt}. Your previous plan is below. Keep the scenarios that stand, keep their ids, and close the directives that follow.`,
+      options.maxScenarios - req.previous.length > 0
+        ? `You have ${options.maxScenarios - req.previous.length} unused scenario slot(s). Beyond that, close directives by widening an existing scenario.`
+        : `The budget is already full at ${req.previous.length} of ${options.maxScenarios} scenarios. There are no free slots, so directives must be closed by widening existing scenarios — not by deleting coverage to make room. Re-read the rule about this in your instructions before revising.`,
       "---",
       JSON.stringify(req.previous, null, 2),
       "---",
@@ -156,11 +173,25 @@ async function reconDigest(ctx: AgentContext): Promise<string> {
   ].join("\n");
 }
 
-/** Trims to the run's ceiling, keeping the highest-priority scenarios. */
-function capped(scenarios: Scenario[], max: number): Scenario[] {
+/**
+ * Trims to the run's ceiling, keeping the highest-priority scenarios.
+ *
+ * A backstop, not the mechanism — the budget is stated in the prompt, and a Planner
+ * that respects it never reaches here. When it does fire it silently deletes real
+ * coverage, so it reports itself as a failed tool call rather than trimming quietly. A
+ * plan that is one scenario shorter than the model wrote is otherwise never noticed.
+ */
+function capped(ctx: AgentContext, scenarios: Scenario[], max: number): Scenario[] {
   if (scenarios.length <= max) return scenarios;
   const rank = { critical: 0, high: 1, medium: 2, low: 3 } as const;
-  return [...scenarios]
-    .sort((a, b) => rank[a.priority] - rank[b.priority])
-    .slice(0, max);
+  const kept = [...scenarios].sort((a, b) => rank[a.priority] - rank[b.priority]).slice(0, max);
+  const dropped = scenarios.filter((s) => !kept.includes(s));
+  ctx.tool(
+    "planner",
+    "cap_scenarios",
+    `Plan exceeded the ${max}-scenario budget; dropped ${dropped.length} lowest-priority: ` +
+      dropped.map((s) => s.id).join(", "),
+    false,
+  );
+  return kept;
 }

@@ -20,6 +20,8 @@
 
 import { MCPServerStdio } from "@openai/agents";
 import { runPath } from "../paths";
+import { writeArtifact } from "../workspace";
+import { WATCH_OVERLAY } from "./watch-overlay";
 import type { RunInput } from "@/lib/types";
 
 /** Read-write browsing: enough to log in and drive a form, nothing that executes code. */
@@ -60,7 +62,10 @@ export function createPlaywrightServer(
   runId: string,
   input: RunInput,
   agent: "recon" | "planner",
+  /** Path to the watch overlay, when this is a headed run someone is watching. */
+  overlayPath?: string,
 ): MCPServerStdio {
+  const headed = !input.options.headless;
   const options: ConstructorParameters<typeof MCPServerStdio>[0] = {
     name: `playwright-${agent}`,
     command: "npx",
@@ -68,6 +73,25 @@ export function createPlaywrightServer(
       "--no-install",
       "@playwright/mcp@0.0.80",
       ...(input.options.headless ? ["--headless"] : []),
+      // A headed run is being watched by a person, so it is tuned for a person: a
+      // window sized to be legible over a shoulder, a longer settle so each action is
+      // separable rather than a blur, and the cursor overlay that makes Playwright's
+      // synthetic clicks visible at all.
+      ...(headed
+        ? [
+            // Small enough to sit beside the Odyssey UI on one screen — the point of a
+            // headed run is watching the agent and the Decision Log together, not
+            // filling the display with the app under test.
+            "--viewport-size",
+            "900x620",
+            // A person needs longer than a machine to see what happened. This pauses
+            // after each action so clicks and navigations are separable rather than a
+            // blur; it costs wall-clock time and buys the whole demo.
+            "--timeout-settle",
+            "1200",
+            ...(overlayPath ? ["--init-script", overlayPath] : []),
+          ]
+        : []),
       // Keep the profile in memory so runs cannot contaminate each other, and so a
       // run's cookies are not left on disk after it finishes.
       "--isolated",
@@ -100,7 +124,15 @@ export async function withPlaywright<T>(
   agent: "recon" | "planner",
   body: (server: MCPServerStdio) => Promise<T>,
 ): Promise<T> {
-  const server = createPlaywrightServer(runId, input, agent);
+  // Written into the run workspace rather than shipped as a file on disk, so it cannot
+  // go missing from a production build and so the run is self-describing afterwards.
+  let overlayPath: string | undefined;
+  if (!input.options.headless) {
+    await writeArtifact(runId, "watch-overlay.js", WATCH_OVERLAY);
+    overlayPath = runPath(runId, "watch-overlay.js");
+  }
+
+  const server = createPlaywrightServer(runId, input, agent, overlayPath);
   await server.connect();
   try {
     return await body(server);
