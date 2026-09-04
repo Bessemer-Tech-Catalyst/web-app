@@ -184,7 +184,7 @@ export async function generate(
               `Not attempted: the run passed its $${ctx.input.options.budgetUsd.toFixed(2)} budget ` +
               "ceiling before this scenario started.";
             quarantined.push({ scenarioId: held.id, title: held.title, reason });
-            provenance.push({ scenarioId: held.id, outcome: "not-attempted-over-budget", reason, ledger: [] });
+            provenance.push({ scenarioId: held.id, title: held.title, outcome: "not-attempted-over-budget", reason, ledger: [] });
           }
           ctx.tool(
             "generator",
@@ -237,6 +237,7 @@ export async function generate(
           ctx.tool("generator", "quarantine", `${scenario.title} — ${reason}`, false);
           provenance.push({
             scenarioId: scenario.id,
+            title: scenario.title,
             outcome: "quarantined-by-error",
             reason,
             ledger: [...ledger],
@@ -249,7 +250,7 @@ export async function generate(
         if (out.outcome === "quarantine" || !out.code?.trim()) {
           quarantined.push({ scenarioId: scenario.id, title: scenario.title, reason: reasonOf(out.reason) });
           ctx.tool("generator", "quarantine", `${scenario.title} — ${reasonOf(out.reason)}`, false);
-          provenance.push({ scenarioId: scenario.id, outcome: "quarantined-by-agent", reason: reasonOf(out.reason), ledger: [...ledger] });
+          provenance.push({ scenarioId: scenario.id, title: scenario.title, outcome: "quarantined-by-agent", reason: reasonOf(out.reason), ledger: [...ledger] });
           continue;
         }
 
@@ -267,7 +268,7 @@ export async function generate(
                 ". Emitting them would be guessing.";
           quarantined.push({ scenarioId: scenario.id, title: scenario.title, reason });
           ctx.tool("generator", "verify_locator_provenance", `${scenario.title} — ${reason}`, false);
-          provenance.push({ scenarioId: scenario.id, outcome: "quarantined-by-gate", proof, ledger: [...ledger] });
+          provenance.push({ scenarioId: scenario.id, title: scenario.title, outcome: "quarantined-by-gate", proof, ledger: [...ledger] });
           continue;
         }
 
@@ -287,7 +288,7 @@ export async function generate(
           `${file} — ${proof.verified}/${proof.total} locators resolved on the live page`,
         );
         ctx.artifact("test", file, scenario.title);
-        provenance.push({ scenarioId: scenario.id, outcome: "emitted", file, proof, ledger: [...ledger] });
+        provenance.push({ scenarioId: scenario.id, title: scenario.title, outcome: "emitted", file, proof, ledger: [...ledger] });
       }
     });
   } finally {

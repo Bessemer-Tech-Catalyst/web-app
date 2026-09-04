@@ -107,12 +107,42 @@ export const GENERATOR_TOOLS = [
   "browser_verify_list_visible",
 ];
 
-export type McpAgent = "recon" | "planner" | "generator";
+/**
+ * The Classifier looks and does not touch.
+ *
+ * It is deciding whether the *application* is broken, so it must not be able to change
+ * the application while deciding — a classifier that clicks its way into a different
+ * state and then reports on that state is describing its own side effects. Console and
+ * network are the two tools that matter here: an uncaught exception or a 5xx behind a
+ * failing assertion is the difference between a bug worth filing and a locator worth
+ * healing, and neither is visible in Playwright's error text.
+ */
+export const CLASSIFIER_TOOLS = [
+  "browser_navigate",
+  "browser_snapshot",
+  "browser_find",
+  "browser_wait_for",
+  "browser_console_messages",
+  "browser_network_requests",
+  "browser_take_screenshot",
+];
+
+/**
+ * The Healer gets the Generator's set, and for the same reason: it is writing locators
+ * into a file that will be re-run, so it is held to the Generator's rule — every locator
+ * in the patch must have been resolved on the live page in the healing session. A healer
+ * allowed to guess is just a slower way of writing a red test.
+ */
+export const HEALER_TOOLS = GENERATOR_TOOLS;
+
+export type McpAgent = "recon" | "planner" | "generator" | "classifier" | "healer";
 
 const TOOLS: Record<McpAgent, string[]> = {
   recon: RECON_TOOLS,
   planner: PLANNER_TOOLS,
   generator: GENERATOR_TOOLS,
+  classifier: CLASSIFIER_TOOLS,
+  healer: HEALER_TOOLS,
 };
 
 /**
@@ -129,6 +159,10 @@ const CAPS: Record<McpAgent, string> = {
   recon: "vision",
   planner: "vision",
   generator: "testing,storage",
+  classifier: "vision",
+  // The Healer re-proves locators exactly as the Generator does, so it needs the same
+  // `testing` verbs; it never dumps a session, so it does not get `storage`.
+  healer: "testing",
 };
 
 /**

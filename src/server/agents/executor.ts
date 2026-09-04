@@ -26,9 +26,21 @@ import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { runDir, runPath } from "../paths";
+import { writeArtifact } from "../workspace";
 import { keyOf, specsIn, type PwReport, type PwSpec } from "./report-keys";
 import type { AgentContext } from "../orchestrator/agents";
 import type { GeneratedTest, TestResult, TestStatus } from "@/lib/types";
+
+/**
+ * Where the *untruncated* error text for every failing test is kept.
+ *
+ * `TestResult.error` is clipped to 600 characters because it is rendered on screen, and
+ * Playwright puts the cause of an actionability failure at the end of a call log that is
+ * routinely longer than that. Triage classifies on exactly that tail — "waiting for
+ * getByRole(…)" and "<div> intercepts pointer events" are different verdicts — so the
+ * whole thing is written to disk here, once, by the only stage that ever holds it.
+ */
+export const FAILURES_FILE = "results/failures.json";
 
 /** Wall-clock ceiling for the whole suite. §7's time guard: a hung suite is a dead demo. */
 const SUITE_TIMEOUT_MS = Number(process.env.ODYSSEY_EXECUTE_TIMEOUT_MS ?? 10 * 60_000);
@@ -62,7 +74,12 @@ export async function execute(
     // output is the most useful thing we have, so it is what gets reported.
     const detail = lastLines(run.stderr || run.stdout, 4) || `exit code ${run.code}`;
     ctx.tool("runner", "playwright", `The runner produced no results.json — ${detail}`, false);
-    return req.tests.map((t) => failure(t, req.attempt, `The test runner did not run this file: ${detail}`));
+    const message = `The test runner did not run this file: ${detail}`;
+    await writeFailures(
+      ctx,
+      Object.fromEntries(req.tests.map((t) => [t.id, `${message}\n\n${stripAnsi(run.stderr || run.stdout).slice(-4000)}`])),
+    );
+    return req.tests.map((t) => failure(t, req.attempt, message));
   }
 
   const workspace = runDir(ctx.runId);
@@ -79,6 +96,9 @@ export async function execute(
   }
 
   const results: TestResult[] = [];
+  /** testId → the failure's full error text, for triage. See `FAILURES_FILE`. */
+  const fullErrors: Record<string, string> = {};
+
   for (const test of req.tests) {
     // `GeneratedTest.file` is workspace-relative by construction (`generator.ts` writes
     // it as `tests/<slug>.spec.ts`), so the workspace is its root.
@@ -87,6 +107,7 @@ export async function execute(
       const detail =
         report.errors?.map((e) => e.message).find((m) => m?.includes(test.file)) ??
         "It produced no result — the file most likely failed to load.";
+      fullErrors[test.id] = detail;
       results.push(failure(test, req.attempt, clip(detail)));
       continue;
     }
@@ -98,6 +119,7 @@ export async function execute(
     const status = foldStatus(outcomes.map((r) => r.status));
     const durationMs = outcomes.reduce((n, r) => n + (r.duration ?? 0), 0);
     const error = outcomes.map((r) => r.error?.message).find(Boolean);
+    if (error) fullErrors[test.id] = stripAnsi(error);
 
     for (const attachment of outcomes.flatMap((r) => r.attachments ?? [])) {
       const kind = attachmentKind(attachment.name, attachment.contentType);
@@ -116,6 +138,8 @@ export async function execute(
       error: error ? clip(stripAnsi(error)) : undefined,
     });
   }
+
+  await writeFailures(ctx, fullErrors);
 
   const passed = results.filter((r) => r.status === "passed").length;
   ctx.tool(
@@ -203,6 +227,34 @@ function spawnPlaywright(ctx: AgentContext, cli: string, args: string[]): Promis
 //
 // `specsIn` and `keyOf` — the match itself — live in `./report-keys` so that
 // `report-keys.test.ts` can load and pin them; see the header there.
+
+/**
+ * Merges this pass's full error texts into `FAILURES_FILE`.
+ *
+ * Merged rather than replaced because the Healer re-runs a single test through its own
+ * invocation: a rerun that reported only its own failure would erase the evidence
+ * bundles of every other red test in the suite, and triage reads this file after the
+ * healer has already been through it.
+ */
+async function writeFailures(ctx: AgentContext, errors: Record<string, string>) {
+  let existing: Record<string, string> = {};
+  try {
+    existing = JSON.parse(await readFile(runPath(ctx.runId, FAILURES_FILE), "utf8")) as Record<string, string>;
+  } catch {
+    /* first pass — nothing to merge */
+  }
+  await writeArtifact(ctx.runId, FAILURES_FILE, JSON.stringify({ ...existing, ...errors }, null, 2));
+}
+
+/** The full error text for a failing test, or the clipped one if the file is missing. */
+export async function readFullError(runId: string, testId: string): Promise<string | undefined> {
+  try {
+    const all = JSON.parse(await readFile(runPath(runId, FAILURES_FILE), "utf8")) as Record<string, string>;
+    return all[testId];
+  } catch {
+    return undefined;
+  }
+}
 
 async function readReport(ctx: AgentContext): Promise<PwReport | null> {
   try {

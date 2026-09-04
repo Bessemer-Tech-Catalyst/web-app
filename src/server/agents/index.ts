@@ -1,8 +1,8 @@
 /**
  * Which agents are real, per method.
  *
- * Phases 3-4 ship Recon, the Planner, the Critic, the Generator and the Executor.
- * Everything downstream is still
+ * Phases 3-5 ship Recon, the Planner, the Critic, the Generator, the Executor, the
+ * defect Classifier and the Healer. The report's risk ledger and PRD trace are still
  * `stubAgents`, and the composition below is a per-method merge rather than an
  * all-or-nothing switch on purpose: being able to run "real Planner, stubbed everything
  * else" is what makes a six-stage pipeline debuggable, and the all-stub configuration
@@ -15,7 +15,8 @@
  *   ODYSSEY_REAL_AGENTS=plan        real Planner, everything else stubbed
  *   ODYSSEY_REAL_AGENTS=recon,plan  as above, plus real Recon
  *
- * Method names match the `Agents` interface: recon, plan, critique, generate, execute.
+ * Method names match the `Agents` interface: recon, plan, critique, generate, execute,
+ * triage, proposeHeal, rerun.
  * Naming a stage that has not been built yet is a configuration error and is reported as
  * one, rather than silently doing nothing.
  */
@@ -27,10 +28,12 @@ import { plan } from "./planner";
 import { critique } from "./critic";
 import { generate } from "./generator";
 import { execute } from "./executor";
+import { triage } from "./triage";
+import { proposeHeal, rerun } from "./healer";
 import type { Agents } from "../orchestrator/agents";
 
-/** Everything Phases 3-4 implement for real. Extended in Phases 5-6. */
-const REAL: Partial<Agents> = { recon, plan, critique, generate, execute };
+/** Everything Phases 3-5 implement for real. Extended in Phase 6. */
+const REAL: Partial<Agents> = { recon, plan, critique, generate, execute, triage, proposeHeal, rerun };
 
 export type RealAgentName = keyof typeof REAL;
 

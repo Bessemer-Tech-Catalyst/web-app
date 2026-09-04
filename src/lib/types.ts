@@ -265,6 +265,12 @@ export interface TriageOutcome {
   confidence: number; // 0-1
   rationale: string;
   evidence: Evidence[];
+  /**
+   * Present only on `APP_DEFECT`, and only when the classifier named it. The bug ledger
+   * files what the classifier found; an orchestrator that invented the title would be
+   * describing a defect nothing had actually diagnosed.
+   */
+  bug?: { title: string; severity: Priority };
 }
 
 // --- Healing ----------------------------------------------------------------

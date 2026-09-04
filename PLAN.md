@@ -202,8 +202,8 @@ so it's a swap, not a rewrite.
 | 1 | The UI — both screens, fully working, driven by a realistic fake run | ✅ done |
 | 2 | The orchestrator state machine + real live streaming + saved runs | ✅ done |
 | 3 | Recon + Planner + the Coverage Critic (real browser, real model) | ✅ **done and verified against a live app** |
-| **4** | Generator with live selector proving + parallel test execution | ◀ **next** |
-| 5 | Triage + Healer + the assertion guard | |
+| 4 | Generator with live selector proving + parallel test execution | ✅ **done and verified by a green live run** |
+| **5** | Triage + Healer + the assertion guard | ◀ **built, awaiting the run that proves it** |
 | 6 | Final report, PRD gap analysis, risk ledger, screenshot/video viewer | |
 | 7 | Demo rehearsal, README, architecture diagram, deck, video | |
 
@@ -231,8 +231,38 @@ So when phase 2 plugs in the real engine, **the UI doesn't change at all.** No r
 
 ## Where we are
 
-**Phases 1–4 are done, and both have been run against live applications** — not a fixture, not a
-stub: a real authenticated SaaS app and a real public one, with a real key, in a real browser.
+**Phases 1–4 are done and were run against live applications** — not a fixture, not a stub: a real
+authenticated SaaS app and a real public one, with a real key, in a real browser. **Phase 5 is
+built and has not yet been through a live run**, which on this project's standard means it is not
+done; the section below says exactly what that leaves unproven.
+
+### Phase 5: it can now tell a broken test from a broken app — on paper
+
+The Classifier and the Healer are real code rather than stand-ins, and the three ideas that make
+them worth showing are all in:
+
+- **The classifier cannot bluff.** Every failure gets a *rule-based prior* first, computed from
+  Playwright's own error text and from the record of which locators resolved on the live page at
+  generation time. The model then looks at the application with a **read-only** browser — it can
+  read the console and the network log, it cannot click — and may overturn the prior. If it
+  overturns it **without citing anything it saw live, its confidence is damped to 0.45 and the
+  report says why.** That is the difference between a classifier and a coin flip with a rationale.
+- **The healer is held to the generator's rule.** Every locator its patch *introduces* must have
+  been resolved on the live page during the heal. Plus the assertion guard, which was already
+  there: it may rewrite locators and waits, never what the test proves.
+- **A flake is retried before it is patched.** One test run settles whether there was ever
+  anything to heal.
+
+**And we can now break an app on command.** `ShopLite` (`/shoplite`) is our own demo target with
+two switches: one renames a button — a perfectly healthy app that a proven locator no longer
+matches — and one makes order history return a 500 while the order itself still saves. Those are
+the two verdicts, on demand, live. It also quietly solves the side-effect problem from Phase 4: its
+basket lives in `sessionStorage`, which `storageState` does not carry, so the suite inherits the
+login and not the agents' shopping.
+
+**What Phase 5 does not claim.** No orchestrated run has been through TRIAGE or HEAL yet. Phase 3
+and Phase 4 each shipped code that typechecked and read correctly and each hid four defects that
+only a live run found. Assume this one does too until a run says otherwise.
 
 ### Phase 4: the pipeline writes tests that pass
 
@@ -315,8 +345,13 @@ of the code that replaced it.
   scenario — `run_7408ff5f` finished at $0.317 against a $0.30 ceiling. Set the ceiling below the
   number you actually mean.
 
-**Not started, and not in any phase**
+**Closed in Phase 5**
 
-- **The demo target app with the feature-flagged deliberate bug.** It is the only way to trigger
-  `APP_DEFECT` on command, which is the strongest single moment in the demo. It is needed the
-  moment the Healer is real in Phase 5, and unscheduled work does not get built.
+- ~~**The demo target app with the feature-flagged deliberate bug.**~~ Built: ShopLite, above. It
+  had been called non-negotiable since Phase 0 while having no phase and no owner, which is how
+  work fails to exist.
+
+**Open**
+
+- **Phase 5 has not been through a live run.** That is the next thing, and it is the only thing
+  standing between "built" and "done".
