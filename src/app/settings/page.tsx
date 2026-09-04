@@ -32,8 +32,8 @@ const DEFAULTS: Array<{ label: string; value: string; note: string }> = [
   },
   {
     label: "Browser",
-    value: DEFAULT_RUN_OPTIONS.headless ? "Headless" : "Headed",
-    note: "Headed is useful for a live demo, slower everywhere else",
+    value: "Headed — always",
+    note: "Every run opens a visible window; this is not a per-run option",
   },
 ];
 

@@ -36,7 +36,8 @@ export function parseRunInput(body: unknown): Parsed<RunInput> {
     maxReplans: clamp(o.maxReplans, 0, 5, DEFAULT_RUN_OPTIONS.maxReplans),
     maxHealAttemptsPerTest: clamp(o.maxHealAttemptsPerTest, 0, 5, DEFAULT_RUN_OPTIONS.maxHealAttemptsPerTest),
     parallelWorkers: clamp(o.parallelWorkers, 1, 16, DEFAULT_RUN_OPTIONS.parallelWorkers),
-    headless: typeof o.headless === "boolean" ? o.headless : DEFAULT_RUN_OPTIONS.headless,
+    // No `headless` here on purpose: a run always opens a visible browser, so the
+    // request body has no say in it. See src/server/browser-mode.ts.
     budgetUsd: clamp(o.budgetUsd, 0.25, 100, DEFAULT_RUN_OPTIONS.budgetUsd),
   };
 

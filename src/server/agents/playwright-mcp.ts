@@ -19,6 +19,7 @@
  */
 
 import { MCPServerStdio } from "@openai/agents";
+import { WATCH_SETTLE_MS, WATCH_VIEWPORT, headed } from "../browser-mode";
 import { runPath } from "../paths";
 import { writeArtifact } from "../workspace";
 import { WATCH_OVERLAY } from "./watch-overlay";
@@ -65,30 +66,26 @@ export function createPlaywrightServer(
   /** Path to the watch overlay, when this is a headed run someone is watching. */
   overlayPath?: string,
 ): MCPServerStdio {
-  const headed = !input.options.headless;
+  const watched = headed();
   const options: ConstructorParameters<typeof MCPServerStdio>[0] = {
     name: `playwright-${agent}`,
     command: "npx",
     args: [
       "--no-install",
       "@playwright/mcp@0.0.80",
-      ...(input.options.headless ? ["--headless"] : []),
+      // Headed is the normal case and the only case a person ever sees; `--headless`
+      // appears only when the operator has declared the process has no display.
+      ...(watched ? [] : ["--headless"]),
       // A headed run is being watched by a person, so it is tuned for a person: a
       // window sized to be legible over a shoulder, a longer settle so each action is
       // separable rather than a blur, and the cursor overlay that makes Playwright's
       // synthetic clicks visible at all.
-      ...(headed
+      ...(watched
         ? [
-            // Small enough to sit beside the Odyssey UI on one screen — the point of a
-            // headed run is watching the agent and the Decision Log together, not
-            // filling the display with the app under test.
             "--viewport-size",
-            "900x620",
-            // A person needs longer than a machine to see what happened. This pauses
-            // after each action so clicks and navigations are separable rather than a
-            // blur; it costs wall-clock time and buys the whole demo.
+            `${WATCH_VIEWPORT.width}x${WATCH_VIEWPORT.height}`,
             "--timeout-settle",
-            "1200",
+            String(WATCH_SETTLE_MS),
             ...(overlayPath ? ["--init-script", overlayPath] : []),
           ]
         : []),
@@ -127,7 +124,7 @@ export async function withPlaywright<T>(
   // Written into the run workspace rather than shipped as a file on disk, so it cannot
   // go missing from a production build and so the run is self-describing afterwards.
   let overlayPath: string | undefined;
-  if (!input.options.headless) {
+  if (headed()) {
     await writeArtifact(runId, "watch-overlay.js", WATCH_OVERLAY);
     overlayPath = runPath(runId, "watch-overlay.js");
   }
