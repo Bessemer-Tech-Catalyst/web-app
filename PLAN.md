@@ -231,10 +231,35 @@ So when phase 2 plugs in the real engine, **the UI doesn't change at all.** No r
 
 ## Where we are
 
-**Phases 1–3 are done, and Phase 3 has been run against a live application** — not a fixture, not
-a stub: a real authenticated SaaS app, with a real key, in a real browser.
+**Phases 1–4 are done, and both have been run against live applications** — not a fixture, not a
+stub: a real authenticated SaaS app and a real public one, with a real key, in a real browser.
 
-What that run proved:
+### Phase 4: the pipeline writes tests that pass
+
+`run_7408ff5f`, against `https://playwright.dev/`, is the run that closes Phase 4:
+
+- The Planner proposed 2 scenarios; the **Critic scored the first pass 82 and accepted it**.
+- The Generator emitted **2 tests, with 14/14 and 20/20 locators proven on the live page** — not
+  a number it chose, a count of how many of its locators Playwright itself had handed back.
+- The Executor ran them with the project's own Playwright: **`expected: 2, unexpected: 0,
+  flaky: 0`** in the runner's own report. The run finished `succeeded`. **$0.317.**
+
+That is a full orchestrated run — recon → plan → critique → generate → execute → report, no human
+between stages — producing a green suite. Until this run the pieces had each been verified
+separately but never in the same run, and the honest version of that gap is what the previous
+handoff led with.
+
+`generate`, `execute`, `recon`, `plan` and `critique` are real. Triage and Heal are still
+deterministic stand-ins behind the `Agents` interface — that is Phase 5, and red tests are
+currently reported *unclassified* rather than as confirmed defects.
+
+**One thing Phase 4 does not claim.** The green run used a **read-only** target on purpose. The
+storage-state hand-off carries the agents' own side effects into the suite — on TodoMVC, Recon
+created a todo while crawling and the generated test then died on a strict-mode violation against
+it. That is an architecture decision left open deliberately, not a bug that was fixed; a
+read-only target routes around it rather than resolving it. See §12.3 of the implementation plan.
+
+### Phase 3: what the earlier live run proved
 
 - Recon took a bare URL and credentials, **found the login form, signed in unaided**, entered a
   workspace and crawled **11 routes** breadth-first — `/appointments`, `/patients`,
@@ -244,9 +269,6 @@ What that run proved:
   works on a real target.
 - The budget guard, the redaction pass, the event log and the resume path all behaved.
 - End to end, no human between stages, ≈$0.06 of tokens.
-
-Three of the ten agent methods are real (`recon`, `plan`, `critique`). The rest are still
-deterministic stand-ins behind the `Agents` interface, which is what Phase 4 starts replacing.
 
 ### What that run also found — all fixed, merged in `207e7c2`
 
@@ -266,35 +288,32 @@ The detailed engineering version of this plan is in
 
 ---
 
-## Open items — read this before starting Phase 4
+## Open items
 
-Found during verification, deliberately not fixed yet. Nothing here is written down anywhere else.
+**Closed during Phase 4** — the session hand-off, the `GENERATOR_TOOLS` allowlist, the fake
+confidence badges (the badge now renders only where something computed it), and the zero-test run
+that reported `succeeded` (it reports `failed`, with an error event saying why). §11 of the
+implementation plan keeps the full before/after, because what each item *was* explains the shape
+of the code that replaced it.
 
-**Blocking Phase 4**
+**Open — a design decision, not a defect**
 
-- **`playwright test` has no session.** The MCP agents share a Chrome profile, but the generated
-  suite runs under `playwright test`, which cannot use a `--user-data-dir` and needs its own
-  `storageState` file. Two options: dump it from the shared profile after Recon (~10 lines, reuses
-  what already provably works), or have the Generator reproduce the login as Playwright code (more
-  agentic, more ways to fail on stage). **Recommend the first.**
-- **`GENERATOR_TOOLS` does not exist.** `createPlaywrightServer` takes `agent: "recon" | "planner"`
-  and needs a third allowlist. The target app authenticates via **localStorage, not cookies** —
-  which the profile handles, and which `storageState` also captures.
-
-**Credibility — small, and a judge could catch any of them**
-
-- **The confidence badges are fake.** Every decision renders a percentage; **11 of the 12 are
-  hardcoded literals** (`0.96`, `0.90`, `0.72`…). Only the triage verdict computes one, from the
-  classifier's own per-failure confidence. Recommended fix: show the badge *only* where something
-  computed it. That turns "what does 96% mean?" into a talking point instead of a hole.
-- **A run producing zero tests still reports `succeeded`.** The Decision Log now says so plainly,
-  but the status field does not. Changing it touches the run list.
+- **The storage-state hand-off carries the agents' own side effects into the suite**, and
+  scenarios are not isolated from each other during generation (they share one browser session by
+  design — that is how the login survives). Both are deliberate architecture, both are visible in
+  a real run, and neither has been decided. This is the one thing standing between the pipeline
+  and a green run on a target that *persists* what the agents do.
 
 **Tuning**
 
-- **`maxReplans: 1` is now the binding constraint**, not the scenario cap. The Critic scores
-  62–68 on the first pass and 72–82 on the second; one re-plan is a coin flip on whether the demo
-  shows *"accepted at 82"* or *"proceeded, allowance spent"*. **Use `maxReplans: 2` for the demo.**
+- **`maxReplans: 1` is the binding constraint**, not the scenario cap. On the clinic app the
+  Critic scores 62–68 on the first pass and 72–82 on the second, so one re-plan is a coin flip on
+  whether the demo shows *"accepted at 82"* or *"proceeded, allowance spent"*. **Use
+  `maxReplans: 2` for the demo.** (On the easier `playwright.dev` target the first pass scored 82
+  outright.)
+- **The budget ceiling is enforced between scenarios**, so a run can overshoot by up to one
+  scenario — `run_7408ff5f` finished at $0.317 against a $0.30 ceiling. Set the ceiling below the
+  number you actually mean.
 
 **Not started, and not in any phase**
 

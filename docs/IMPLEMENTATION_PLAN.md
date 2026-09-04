@@ -318,8 +318,8 @@ most of the *"how clearly does the team present the agent's decisions"* 15%.
 | **1** ✅ | **UI shell.** Next.js scaffold, design system, `types.ts`, launcher page, mission-control page, report page, mock event emitter driving the whole thing | `pnpm dev` → enter a URL → watch a full fake pipeline stream, end to end, looking real |
 | **2** ✅ | Orchestrator FSM + real SSE + run store + workspace scaffolder. Agents still deterministic stubs | A real run row persists; UI streams from `events.ndjson`, not mocks; crash/reload resumes |
 | **3** ✅ | Recon + Planner (`@openai/agents` + Playwright MCP) + Coverage Critic + replan loop | **Met against a live app.** Recon signed in unaided and crawled 11 authenticated routes; the Critic scored 62, named 7 gaps, and the revision passed at 82. See §10. |
-| **4** ◀ *now* | Generator w/ live selector validation + executor (`playwright test --reporter=json`) + shard parallelism | Real green tests on the demo target |
-| **5** | Triage/classifier + Healer + assertion-integrity guard + bounded re-execute | A deliberately broken selector gets healed; a deliberately broken app gets filed as a bug, *not* healed |
+| **4** ✅ | Generator w/ live selector validation + executor (`playwright test --reporter=json`) | **Met.** `run_7408ff5f`: 2 tests emitted at 14/14 and 20/20 proven locators, executed green — `expected: 2, unexpected: 0`. See §12. Shard parallelism was *not* built — there is no `--shard` anywhere. Parallelism is worker-based and a watched run forces `workers: 1`, so fan-out and the headed-browser invariant are in direct conflict, and watching won. |
+| **5** ◀ *now* | Triage/classifier + Healer + assertion-integrity guard + bounded re-execute | A deliberately broken selector gets healed; a deliberately broken app gets filed as a bug, *not* healed |
 | **6** | Report synthesis, PRD gap analysis, risk ledger, artifact viewer (trace/video/screenshot) | The report answers all six must-have bullets |
 | **7** | Replay mode, demo script, README, architecture diagram, deck, video | Rehearsed 4-minute demo that cannot fail |
 
@@ -451,40 +451,46 @@ absolute.
 
 ---
 
-## 11. Open items for Phase 4
+## 11. Open items for Phase 4 — closed
 
-### Blocking
+Every blocking and credibility item below was closed during Phase 4. They are kept, struck
+through, because what each one *was* is the fastest way to understand why the code that
+replaced it is shaped the way it is.
 
-- [ ] **`playwright test` has no session.** It cannot use a Chrome `--user-data-dir` and needs its
-      own `storageState` file. Recommended: dump it from the shared profile after Recon closes
-      (`launchPersistentContext` → `storageState({path})`), which reuses the mechanism already
-      proven. The alternative — the Generator reproducing the login as Playwright code — is more
-      agentic and has more ways to fail live.
-      Note the target app authenticates via **localStorage, not cookies**; `storageState` captures
-      both, but a cookies-only assumption would silently produce a logged-out suite.
-- [ ] **`GENERATOR_TOOLS` allowlist.** `createPlaywrightServer` takes `agent: "recon" | "planner"`
-      and needs a third. Keep the allowlist positive — `browser_evaluate` and
-      `browser_run_code_unsafe` stay out for the Generator too.
-- [ ] Recon no longer writes `tests/seed.spec.ts` (the one it wrote never logged in). Whatever
-      produces the real one is Phase 4's job.
+### Blocking — all done
 
-### Credibility — small, and a judge could catch any of them
+- [x] **`playwright test` has no session.** Done, and by the recommended route:
+      `agents/storage-state.ts` dumps the shared profile after Recon. One correction to the
+      recommendation — the dump goes through the MCP's own `browser_storage_state` rather than our
+      own `launchPersistentContext`, because the MCP launches real Chrome (channel `chrome`) and a
+      second launcher would risk version skew against the profile on disk. The localStorage warning
+      was well placed: the clinic target carries **0 cookies and 4 localStorage entries**, so a
+      cookies-only check would have passed while handing the suite nothing.
+- [x] **`GENERATOR_TOOLS` allowlist.** Done, positive, with `browser_evaluate` and
+      `browser_run_code_unsafe` excluded as required. `browser_storage_state` is deliberately *not*
+      in it — the hand-off calls it via `server.callTool()`, which bypasses `toolFilter`.
+- [x] **The real seed.** Superseded rather than done: there is no seed spec. The session reaches
+      the suite as `storageState`, which is what the seed was a worse way of achieving.
 
-- [ ] **The confidence badges are fake.** Every `decision` renders a percentage and **11 of the 12
-      are hardcoded literals**. Only the triage verdict computes one, as `Math.min` of the
-      classifier's per-failure confidences. The badge is on the panel §5 calls the hero of the 15%
-      UX score, so *"what does 96% mean?"* is a likely question with no answer today.
-      **Recommended: render the badge only where something computed it.**
-- [ ] **A zero-test run still reports `succeeded`.** The Decision Log says so plainly now; the
-      status field does not. Changing it touches the run list.
-- [ ] Redaction runs *after* truncation on tool summaries, so a secret cut mid-string can slip past
-      `redact()`, which matches whole values. Redact first, then truncate.
+### Credibility — all done
+
+- [x] **The confidence badges are fake.** `decision.confidence` is now optional and the badge
+      renders only where something computed it. Eleven hardcoded literals are gone; the one that
+      remains is the triage verdict, which really does compute `Math.min` of the classifier's
+      per-failure confidences.
+- [x] **A zero-test run still reports `succeeded`.** Now reports `failed`, with an `error` event
+      saying why.
+- [x] **Redaction ran after truncation.** Now redacts first, then truncates
+      (`agents/harness.ts`). Truncation also keeps the **tail** as well as the head: Playwright
+      puts the cause of an actionability failure on the *last* line of the call log, so head-only
+      truncation was discarding precisely the diagnostic.
 
 ### Tuning
 
-- [ ] **`maxReplans: 1` is now the binding constraint**, not the scenario cap. First-pass scores
-      land 62–68 and revisions 72–82, so one re-plan is a coin flip on whether the demo shows an
-      accepted plan or a spent allowance. **Run the demo at `maxReplans: 2`.**
+- [ ] **`maxReplans: 1` is the binding constraint**, not the scenario cap. Still true, with one
+      data point against it: on `playwright.dev` the first pass scored **82** and was accepted with
+      `maxReplans: 0`. The 62–68 range was measured on the clinic app, which is a harder target.
+      **Run the demo at `maxReplans: 2`** remains the advice.
 
 ### Not started, and not in any phase
 
@@ -492,3 +498,99 @@ absolute.
       `APP_DEFECT` on command, which is the strongest moment in the demo. Needed the moment the
       Healer is real in Phase 5. §7 has called it non-negotiable since Phase 0 and it still has no
       phase, no owner and no line in the table above — which is how it will fail to exist.
+
+---
+
+## 12. Phase 4 verification — what live runs actually showed
+
+Phase 4 is implemented and exercised end to end by real runs against real targets. The Generator
+emits tests whose every locator was resolved on the live page; the Executor runs them with the
+project's own Playwright and reports what the runner said.
+
+### The closing run — `run_7408ff5f`, against `https://playwright.dev/`
+
+**A full orchestrated run produced a green suite.** This is the claim the phase turns on, and it
+was the last one outstanding.
+
+| | |
+|---|---|
+| Scenarios planned | 2, critique **82 on the first pass**, accepted with `maxReplans: 0` |
+| Tests emitted | 2 — locator provenance **14/14** and **20/20** |
+| Executed | `expected: 2, unexpected: 0, flaky: 0` in Playwright's own `results.json` |
+| Run status | `succeeded` |
+| Cost | **$0.317** |
+
+Two details worth keeping, because both are load-bearing evidence rather than colour:
+
+- The report's `config.rootDir` was `<workspace>/tests`, not the workspace — the exact shape of
+  the defect in §12.1 below. Both tests matched anyway, which is that fix working in production.
+- The target is **read-only**, chosen deliberately: it is the one condition under which the
+  storage-state hand-off cannot carry the agents' own side effects into the suite (see the open
+  design finding below). It closes "can this pipeline produce green?" without pretending to close
+  the design question.
+
+### 12.1 Four defects the earlier runs exposed — all fixed
+
+Each was invisible to typechecking and to reading, and each was found by running the thing.
+
+1. **A wedged scenario killed the whole run.** `Max turns exceeded` on scenario 4 of 10 threw out
+   of the loop, discarding the nine after it, the one test already emitted, and the provenance
+   record. Now caught per scenario, which quarantines with the error as its reason and carries on.
+   Aborts still propagate, so a cancelled run is not reported as ten quarantines.
+2. **The Executor matched no test to its own report.** Playwright sets `config.rootDir` to the
+   common ancestor of the collected specs — the `tests/` directory — so the report named a file
+   `foo.spec.ts` while the run recorded `tests/foo.spec.ts`. Since an unmatched generated test is
+   reported as a failure, **a suite that passed every test would have reported as a suite that
+   failed every test.** Both sides now resolve against their own root and re-relativise.
+3. **`budgetUsd` did not gate the stage that spends the money.** It gated re-planning and healing
+   while `generate` — 86% of the bill — ignored it. `AgentContext.overBudget()` now exists and the
+   Generator stops between scenarios, holding the unrun ones as reported rather than silently
+   missing. Note the ceiling is enforced *between* scenarios, so a run overshoots by up to one
+   scenario: `run_7408ff5f` finished at $0.317 against a $0.30 ceiling.
+4. **Run artifacts leaked into the repo root.** The HTML reporter had no `outputFolder`, so it
+   wrote `playwright-report/` beside the *project's* package.json. Both reporters are now pinned
+   inside the run workspace.
+
+### 12.2 The viewport skew, closed
+
+Generation browses at 900×620 on a watched run; the emitted suite ran at `devices["Desktop
+Chrome"]`, which pins 1280×720. Every locator was therefore proven at one width and asserted at
+another — and a responsive app is a different app at a different width. The generated config now
+pins the project's viewport to the window the Generator browsed at.
+
+It has to be set inside the **project's** `use`: that is merged *over* the top-level one, so
+`devices["Desktop Chrome"]` was reimposing 1280×720 whatever the top level said. Only the watched
+path is pinned; under `ODYSSEY_HEADLESS=1` no `--viewport-size` reaches the MCP either, so that
+case is left as it was rather than pinned to an unmeasured number.
+
+This is also what makes the three *"another navigation button intercepted pointer events"*
+failures on `app.docxion.com` answerable: with the skew gone, a failure that survives it is the
+app's.
+
+### 12.3 Still open — a design finding, not a defect
+
+**The storage-state hand-off carries the agents' own side effects into the suite.** On TodoMVC,
+Recon created a todo while crawling, `captureStorageState` dumped it, the suite started with that
+todo already present, and the generated test died on a strict-mode violation. On a credentialed
+app this is mostly benign — the session is the point — but any record the agents create becomes
+suite fixture data. Relatedly, scenarios share one browser session during generation by design
+(that is how the login survives), so scenario 1's data is visible to scenario 2.
+
+Both are architecture decisions and are deliberately unchanged. `run_7408ff5f` routes around them
+with a read-only target; it does not resolve them.
+
+### 12.4 Tests
+
+`pnpm test` — Node's runner, 19 assertions, ~0.4s, no API and no browser.
+
+- `agents/locator-provenance.test.mts` — the provenance gate, against a ledger of Playwright MCP
+  replies copied verbatim from a live session. The rejection cases are the ones that matter: if a
+  change makes a previously-rejected locator pass, the change is wrong.
+- `agents/report-keys.test.mts` — the report-to-generated-test match, pinned against a real
+  unedited Playwright JSON report in `agents/__fixtures__/`. This is the regression test for
+  defect 2 above.
+
+`specsIn`, `keyOf` and the report types live in `agents/report-keys.ts` rather than inside
+`executor.ts` for exactly one reason: `executor.ts` cannot be loaded outside Next, so a test of it
+could only ever be a *copy* of it. The copy is what the previous version of this test was, with a
+comment admitting it could drift.

@@ -102,16 +102,23 @@ while the generated suite runs at `Desktop Chrome` 1280×720, so a locator is pr
 viewport and exercised at another. Whether the overlap is a real app defect or an artifact
 of the small MCP viewport has not been established.
 
-## Not yet proven
+## ~~Not yet proven~~ — closed by `run_7408ff5f`
 
-**No orchestrated run has produced a green test.** The pieces are each verified — a
-generator-emitted test passed under the real runner (`1 passed (5.3s)`, storageState
-authenticating), and a full orchestrated run generated, executed and reported — but not
-both in the same run. The one orchestrated test that executed failed for design finding 1
-above, not for a defect in Phase 4's code.
+**A full orchestrated run has now produced a green suite.** Against
+`https://playwright.dev/`, 2 scenarios, critique 82 accepted on the first pass:
 
-Closing that needs one run against a target that does not persist agent side effects, or
-a decision about finding 1. Budget roughly $0.25 for 3 scenarios on the clinic app.
+- 2 tests emitted, locator provenance **14/14** and **20/20**
+- executed by the real runner: **`expected: 2, unexpected: 0, flaky: 0`**
+- run finished `succeeded`, **$0.317**
+
+Worth keeping: the report's `config.rootDir` was `<workspace>/tests`, the exact shape of
+bug 2 — and both tests still matched. That is the fix working in production rather than
+in a test.
+
+Taken by the first of the two routes this section offered: **a target that does not
+persist agent side effects.** Design finding 1 below is therefore still open and
+undecided — the read-only target routes around it, it does not resolve it. A green run on
+a target that *does* persist what the agents do still requires that decision.
 
 ## Running it
 
@@ -137,16 +144,29 @@ scenario, including the ones that failed, and is the file to debug a run from.
 
 ## Tests
 
-Two scratchpad tests, both passing, neither in a runner yet:
-- `test-provenance.mts` — the locator-provenance gate.
-- `test-executor-keys.mts` — the report-to-generated-test match, pinned against a real
-  Playwright JSON report. This is the regression test for bug 2.
+Both are now in the repo and in a runner: **`pnpm test`** — 19 assertions, ~0.4s, no API
+and no browser.
+
+- `src/server/agents/locator-provenance.test.mts` — the provenance gate.
+- `src/server/agents/report-keys.test.mts` — the report-to-generated-test match, pinned
+  against a real unedited Playwright JSON report in `src/server/agents/__fixtures__/`.
+  The regression test for bug 2.
+
+`specsIn`/`keyOf` moved out of `executor.ts` into `report-keys.ts` so the test can import
+the *real* functions: `executor.ts` cannot be loaded outside Next, so the old scratchpad
+test was a hand-copy that its own comment admitted could drift.
+
+One thing the port corrected: `prove` dedupes locators on the text **as the model wrote
+it**, not on the canonical form, so the same locator in two quoting styles counts twice in
+`selectorsTotal`. It cannot turn an unproven locator into a proven one — only the
+denominator moves — so the test pins the real behaviour rather than the expected one.
 
 ## Housekeeping
 
 - Ask the user before starting Phase 5 (Triage + Healer).
 - Triage/heal are still stubbed, so no bugs are filed and red tests are reported
   unclassified. The report says so rather than claiming red tests are confirmed defects.
-- `docs/IMPLEMENTATION_PLAN.md` §11 and `PLAN.md` still describe Phase 4 as not started.
-  They should now be updated to describe what exists — including the "not yet proven"
-  section above, which is the part most easily overclaimed.
+- ~~`docs/IMPLEMENTATION_PLAN.md` §11 and `PLAN.md` still describe Phase 4 as not
+  started.~~ Done: §11 is now marked closed item by item, §12 records what the live runs
+  showed, the phase table reads **4 ✅ / 5 ◀ now**, and `PLAN.md` leads with the green run
+  *and* with what it deliberately does not claim.
