@@ -10,7 +10,7 @@
 
 import { type RunInput } from "./types";
 
-const KEY = (id: string) => `crucible:run:${id}`;
+const KEY = (id: string) => `odyssey:run:${id}`;
 
 export function newRunId(): string {
   return `run_${Math.random().toString(16).slice(2, 8)}`;

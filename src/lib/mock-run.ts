@@ -1,5 +1,5 @@
 /**
- * A scripted, realistic Crucible run.
+ * A scripted, realistic Odyssey run.
  *
  * Phase 1 uses this to drive the entire UI so the interface can be designed, demoed
  * and reviewed before any agent code exists. It emits the exact `OrchestratorEvent`

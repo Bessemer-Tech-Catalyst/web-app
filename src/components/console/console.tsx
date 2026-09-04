@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Wordmark } from "@/components/brand";
 import { ActivityFeed } from "@/components/console/activity-feed";
 import { CritiquePanel } from "@/components/console/critique-panel";
 import { DecisionLog } from "@/components/console/decision-log";
@@ -49,11 +48,16 @@ export function RunConsole({ runId }: { runId: string }) {
   const running = state.status === "running";
 
   return (
-    <main className="flex h-dvh flex-col overflow-hidden">
+    <main className="flex h-full flex-col overflow-hidden">
       {/* ---------- top bar ---------- */}
       <header className="shrink-0 border-b border-base-850 bg-base-950/80 backdrop-blur">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-          <Wordmark />
+          <Link
+            href="/runs"
+            className="rounded-md border border-base-800 px-2.5 py-1 text-xs text-base-400 transition hover:border-base-700 hover:text-base-100"
+          >
+            ← Runs
+          </Link>
 
           <div className="flex min-w-0 items-center gap-2 border-l border-base-800 pl-4">
             <Dot tone={running ? "ember" : state.report ? "ok" : "neutral"} pulse={running} />

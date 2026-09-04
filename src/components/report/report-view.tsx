@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Wordmark } from "@/components/brand";
 import {
   Badge,
   Card,
@@ -72,10 +71,9 @@ export function ReportView({ runId }: { runId: string }) {
   const passRate = executed.length ? Math.round((green / executed.length) * 100) : 0;
 
   return (
-    <main className="min-h-dvh">
+    <main className="min-h-full">
       <header className="border-b border-base-850 bg-base-950/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-4 px-5 py-3">
-          <Wordmark />
           <Link
             href={`/runs/${runId}`}
             className="rounded-md border border-base-800 px-2.5 py-1 text-xs text-base-400 transition hover:text-base-100"

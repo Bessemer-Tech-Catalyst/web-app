@@ -1,5 +1,5 @@
 /**
- * Crucible — core domain + event model.
+ * The Odyssey — core domain + event model.
  *
  * This file is the contract between the orchestrator and the UI. Phase 1 drives the
  * entire UI from a mock emitter that speaks this exact language, so wiring the real

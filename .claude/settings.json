@@ -12,7 +12,12 @@
       "Bash(pnpm -v)",
       "Bash(pnpm create *)",
       "Bash(pnpm install *)",
-      "WebFetch(domain:www.tasteskill.dev)"
+      "WebFetch(domain:www.tasteskill.dev)",
+      "Bash(pnpm exec *)",
+      "Bash(pnpm lint *)",
+      "Bash(timeout 300 pnpm build)",
+      "Bash(pnpm build *)",
+      "Bash(curl -s http://localhost:3001/nope)"
     ]
   }
 }

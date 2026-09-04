@@ -4,9 +4,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { Badge, Card, Dot } from "@/components/ui/primitives";
-import { RECENT_RUNS } from "@/lib/mock-run";
 import { DEFAULT_RUN_OPTIONS, type RunInput, type RunOptions } from "@/lib/types";
-import { cn, formatRelative, hostOf } from "@/lib/format";
+import { cn } from "@/lib/format";
 import { newRunId, saveDraft } from "@/lib/run-draft";
 
 const PRESETS = [
@@ -66,7 +65,7 @@ export function Launcher() {
   return (
     <div className="mx-auto w-full max-w-5xl px-5 pb-24">
       {/* ---- hero ---- */}
-      <div className="relative pt-16 pb-10 text-center sm:pt-24">
+      <div className="relative pt-10 pb-10 text-center sm:pt-16">
         <div className="grid-fade pointer-events-none absolute inset-x-0 top-0 -z-10 h-72" />
         <Badge tone="ember" className="mx-auto">
           <Dot tone="ember" /> Autonomous test orchestration
@@ -79,7 +78,7 @@ export function Launcher() {
           </span>
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-pretty text-sm leading-relaxed text-base-400 sm:text-base">
-          Crucible plans, grades its own plan, generates Playwright tests with every
+          The Odyssey plans, grades its own plan, generates Playwright tests with every
           selector proven on the live page, runs them, works out whether a failure is a
           broken script or a broken app, heals only what it should — and tells you what
           it never got to.
@@ -336,40 +335,12 @@ export function Launcher() {
         ))}
       </div>
 
-      {/* ---- recent runs ---- */}
-      <div className="mt-10">
-        <h2 className="mb-2.5 text-[11px] font-medium uppercase tracking-wider text-base-500">
-          Recent runs
-        </h2>
-        <Card className="divide-y divide-base-800">
-          {RECENT_RUNS.map((r) => (
-            <Link
-              key={r.id}
-              href={`/runs/${r.id}`}
-              className="flex items-center gap-3 px-4 py-3 transition hover:bg-base-850/50"
-            >
-              <Dot tone={r.status === "succeeded" ? "ok" : "danger"} />
-              <span className="min-w-0 flex-1 truncate font-mono text-xs text-base-300">
-                {hostOf(r.url)}
-              </span>
-              <span className="hidden text-xs text-base-600 sm:block">
-                {formatRelative(r.startedAt)}
-              </span>
-              <Badge tone={r.coverageScore >= 85 ? "ok" : "warn"} mono>
-                {r.coverageScore}
-              </Badge>
-              <span className="w-24 text-right font-mono text-xs text-base-500">
-                <span className="text-ok-400">{r.passed}</span>
-                {" / "}
-                <span className={r.failed ? "text-danger-400" : "text-base-600"}>
-                  {r.failed}
-                </span>
-                <span className="text-base-700"> of {r.scenarios}</span>
-              </span>
-            </Link>
-          ))}
-        </Card>
-      </div>
+      <p className="mt-10 text-center text-xs text-base-600">
+        Looking for something you already ran?{" "}
+        <Link href="/runs" className="text-ember-400 hover:text-ember-300">
+          Past runs →
+        </Link>
+      </p>
     </div>
   );
 }

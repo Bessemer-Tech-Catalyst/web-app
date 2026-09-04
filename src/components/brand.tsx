@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { cn } from "@/lib/format";
 
-/** The crucible: a vessel with molten content and rising heat. */
-export function CrucibleMark({ className }: { className?: string }) {
+/** Odyssey: a compass rose — a long voyage, navigated rather than wandered. */
+export function OdysseyMark({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 32 32"
@@ -11,32 +11,36 @@ export function CrucibleMark({ className }: { className?: string }) {
       className={cn("size-7", className)}
     >
       <defs>
-        <linearGradient id="cru-melt" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id="ody-needle" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="var(--color-ember-300)" />
           <stop offset="100%" stopColor="var(--color-ember-600)" />
         </linearGradient>
       </defs>
-      {/* rising heat */}
-      <path
-        d="M12 7.5c0-2 1.6-2.6 1.6-4.5M16 6.5c0-2.4 1.8-3 1.8-5M20 7.5c0-2 1.6-2.6 1.6-4.5"
-        stroke="var(--color-ember-500)"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        opacity="0.75"
-      />
-      {/* vessel */}
-      <path
-        d="M5.5 12h21l-2.4 12.2a4 4 0 0 1-3.92 3.3h-8.36a4 4 0 0 1-3.92-3.3L5.5 12Z"
+      {/* bezel */}
+      <circle
+        cx="16"
+        cy="16"
+        r="12.4"
         stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
+        strokeWidth="1.7"
+        opacity="0.85"
       />
-      {/* melt line */}
+      {/* cardinal ticks */}
       <path
-        d="M7.4 16.4h17.2l-1.6 7.9a2.6 2.6 0 0 1-2.55 2.1h-8.9a2.6 2.6 0 0 1-2.55-2.1L7.4 16.4Z"
-        fill="url(#cru-melt)"
-        opacity="0.9"
+        d="M16 1.4v3.2M16 27.4v3.2M1.4 16h3.2M27.4 16h3.2"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        opacity="0.55"
       />
+      {/* needle — north half burns */}
+      <path d="M16 6.4 19.3 16 16 25.6 12.7 16Z" fill="url(#ody-needle)" />
+      <path
+        d="M16 6.4 19.3 16h-6.6L16 6.4Z"
+        fill="var(--color-ember-300)"
+        opacity="0.55"
+      />
+      <circle cx="16" cy="16" r="1.5" fill="var(--color-base-950)" />
     </svg>
   );
 }
@@ -44,23 +48,32 @@ export function CrucibleMark({ className }: { className?: string }) {
 export function Wordmark({
   href = "/",
   subtitle,
+  compact,
 }: {
   href?: string;
   subtitle?: string;
+  /** Mark only — used by the collapsed sidebar rail. */
+  compact?: boolean;
 }) {
   return (
-    <Link href={href} className="group flex items-center gap-2.5">
-      <CrucibleMark className="size-7 text-base-300 transition-colors group-hover:text-base-100" />
-      <span className="flex flex-col leading-none">
-        <span className="text-[15px] font-semibold tracking-tight text-base-100">
-          Crucible
-        </span>
-        {subtitle ? (
-          <span className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-base-500">
-            {subtitle}
+    <Link
+      href={href}
+      className="group flex items-center gap-2.5"
+      aria-label="The Odyssey — home"
+    >
+      <OdysseyMark className="size-7 shrink-0 text-base-400 transition-colors group-hover:text-base-100" />
+      {compact ? null : (
+        <span className="flex flex-col leading-none">
+          <span className="text-[15px] font-semibold tracking-tight text-base-100">
+            <span className="font-normal text-base-400">The </span>Odyssey
           </span>
-        ) : null}
-      </span>
+          {subtitle ? (
+            <span className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-base-500">
+              {subtitle}
+            </span>
+          ) : null}
+        </span>
+      )}
     </Link>
   );
 }
