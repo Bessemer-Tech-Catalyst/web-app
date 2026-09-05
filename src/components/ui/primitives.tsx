@@ -26,15 +26,26 @@ export function Section({
   className,
   as: Tag = "section",
   flush,
+  id,
 }: {
   children: ReactNode;
   className?: string;
   as?: "section" | "div" | "article" | "aside";
   /** Drop the closing rule — for the last section on a page. */
   flush?: boolean;
+  /** Anchor target, for documents with a jump-to nav. */
+  id?: string;
 }) {
   return (
-    <Tag className={cn(!flush && "border-b border-base-850", className)}>
+    <Tag
+      id={id}
+      className={cn(
+        !flush && "border-b border-base-850",
+        // Clears the sticky document header when jumped to from the nav.
+        id && "scroll-mt-21",
+        className,
+      )}
+    >
       {children}
     </Tag>
   );
@@ -71,8 +82,12 @@ export function SectionHeader({
     >
       <div className="min-w-0">
         <h2 className="text-body font-semibold tracking-wide text-base-200">{title}</h2>
+        {/* The subtitle is a sentence, and a sentence set to the full width of a
+            1500px window is a line nobody's eye can track back from. */}
         {subtitle ? (
-          <p className="mt-0.5 text-meta text-base-500">{subtitle}</p>
+          <p className="mt-0.5 max-w-[68ch] text-meta leading-relaxed text-base-500">
+            {subtitle}
+          </p>
         ) : null}
       </div>
       {right ? <div className="shrink-0">{right}</div> : null}
@@ -109,6 +124,29 @@ export function SplitGrid({
           : "sm:divide-x sm:divide-y-0 lg:divide-x",
         cols === 4 && "sm:max-lg:divide-y",
         className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The row of figures at the head of a document.
+ *
+ * Six across on a wide screen, three then three in the middle, one per line on a phone —
+ * and the rules follow the wrap. `divide-y` cannot do this on its own: it draws a rule
+ * above every cell but the first, which in a three-column grid means seams inside the
+ * first row. So the wrapped row's rule is drawn where the wrap actually happens.
+ */
+export function StatBand({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className={cn(
+        "grid divide-y divide-base-850",
+        "sm:grid-cols-3 sm:divide-x sm:divide-y-0",
+        "sm:max-lg:[&>*:nth-child(n+4)]:border-t sm:max-lg:[&>*:nth-child(n+4)]:border-base-850",
+        "lg:grid-cols-6",
       )}
     >
       {children}
@@ -230,7 +268,29 @@ export function Meter({
 
 // --- Empty ------------------------------------------------------------------
 
-export function Empty({ children }: { children: ReactNode }) {
+export function Empty({
+  children,
+  inline,
+}: {
+  children: ReactNode;
+  /**
+   * For anything that fills from the top — a section on a scrolling document, a
+   * log waiting on its first entry — where a centred void the height of a card
+   * is just dead space. The centred form is for a region whose whole job is to
+   * hold this one message.
+   */
+  inline?: boolean;
+}) {
+  if (inline) {
+    return (
+      <div className={cn("flex items-start gap-2.5 py-4 text-xs text-base-600", SECTION_X)}>
+        {/* Aligned to the first line rather than to the block, so the rule still points
+            at the sentence when the sentence wraps. */}
+        <span aria-hidden className="mt-2 h-px w-5 shrink-0 bg-base-800" />
+        <span className="max-w-[80ch]">{children}</span>
+      </div>
+    );
+  }
   return (
     <div className="flex min-h-24 items-center justify-center px-6 py-8 text-center text-detail text-base-500">
       {children}

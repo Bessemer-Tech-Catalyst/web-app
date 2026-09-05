@@ -9,10 +9,12 @@ import { STAGES, STAGE_META, type RunState } from "@/lib/types";
  * eight times across the widest band on the page — which pushed the eight stages past the
  * viewport so the last two scrolled out of sight. It is shown for the *current* stage
  * only, in the footer, where it is help for the thing happening now rather than eight
- * paragraphs of chrome. The strip is one row again, and the durations it has room for
- * now say where the run's time went.
+ * paragraphs of chrome, and it stays one hover away here. The strip is one row again, and
+ * the durations it has room for now say where the run's time went.
  */
 export function StagePipeline({ state }: { state: RunState }) {
+  const doneCount = STAGES.filter((s) => state.stages[s].status === "done").length;
+
   return (
     <div>
       {/* gap-px over a hairline ground, rather than a border on every cell keyed to its
@@ -22,6 +24,7 @@ export function StagePipeline({ state }: { state: RunState }) {
       <ol className="grid grid-cols-2 gap-px bg-base-850 sm:grid-cols-4 xl:grid-cols-8">
         {STAGES.map((stage) => {
           const s = state.stages[stage];
+          const meta = STAGE_META[stage];
           const active = s.status === "active";
           const done = s.status === "done";
           const failed = s.status === "failed";
@@ -29,6 +32,7 @@ export function StagePipeline({ state }: { state: RunState }) {
           return (
             <li
               key={stage}
+              title={`${meta.label} — ${meta.blurb}`}
               aria-current={active ? "step" : undefined}
               className={cn(
                 "flex items-center gap-2.5 px-4 py-3",
@@ -50,7 +54,7 @@ export function StagePipeline({ state }: { state: RunState }) {
                     !active && !done && !failed && "text-base-600",
                   )}
                 >
-                  {STAGE_META[stage].label}
+                  {meta.label}
                 </div>
                 <div
                   className={cn(
@@ -72,23 +76,29 @@ export function StagePipeline({ state }: { state: RunState }) {
         })}
       </ol>
 
+      {/* One hairline under the whole strip, filled to the last finished stage: the shape
+          of the run at a glance, without reading eight labels. Drawn as its own row rather
+          than pinned to the bottom of the grid, so it stays one bar when the strip wraps. */}
+      <div aria-hidden className="h-px bg-base-850">
+        <div
+          className="h-full bg-ember-600/60 transition-[width] duration-700 ease-out"
+          style={{ width: `${(doneCount / STAGES.length) * 100}%` }}
+        />
+      </div>
     </div>
   );
 }
 
 function StageGlyph({ status, attempt }: { status: string; attempt: number }) {
-  const base = "flex size-5 shrink-0 items-center justify-center rounded-full border";
+  const base =
+    "flex size-5 shrink-0 items-center justify-center rounded-full border text-meta leading-none";
   if (status === "done")
     return (
-      <span className={cn(base, "border-ok-500/40 text-meta leading-none text-ok-400")}>
-        ✓
-      </span>
+      <span className={cn(base, "border-ok-500/40 bg-ok-500/12 text-ok-400")}>✓</span>
     );
   if (status === "failed")
     return (
-      <span
-        className={cn(base, "border-danger-500/50 text-meta leading-none text-danger-400")}
-      >
+      <span className={cn(base, "border-danger-500/45 bg-danger-500/12 text-danger-400")}>
         ✕
       </span>
     );
@@ -97,11 +107,11 @@ function StageGlyph({ status, attempt }: { status: string; attempt: number }) {
       <span
         className={cn(
           base,
-          "animate-pulse-ring border-ember-500 font-mono text-meta leading-none text-ember-400",
+          "animate-pulse-ring border-ember-500/50 bg-ember-500/15 font-mono text-ember-400",
         )}
       >
         {attempt > 1 ? attempt : "▸"}
       </span>
     );
-  return <span className={cn(base, "border-base-800 text-meta leading-none text-base-700")}>·</span>;
+  return <span className={cn(base, "border-base-800 text-base-700")}>·</span>;
 }

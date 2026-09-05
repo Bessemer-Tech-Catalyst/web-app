@@ -39,7 +39,9 @@ export function CritiquePanel({ critiques }: { critiques: Critique[] }) {
         }
       />
       {!latest ? (
-        <Empty>The plan has not been graded yet</Empty>
+        // One line, not a panel-height void. Until the Critique stage runs there is
+        // exactly one fact to report, and the space belongs to the decision log above.
+        <Empty inline>The plan has not been graded yet</Empty>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
           <div className="flex items-end gap-3">
