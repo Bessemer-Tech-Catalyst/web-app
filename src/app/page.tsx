@@ -27,8 +27,12 @@ export default async function OverviewPage() {
         )
       : 0;
   const healed = runs.reduce((n, r) => n + r.healed, 0);
-  const allBugs = runStates.flatMap((r) => r.state?.report?.bugs ?? []);
-  const allRisks = runStates.flatMap((r) => r.state?.report?.risks ?? []);
+  const allBugs = runStates.flatMap((r) =>
+    (r.state?.report?.bugs ?? []).map((b) => ({ ...b, runId: r.id }))
+  );
+  const allRisks = runStates.flatMap((r) =>
+    (r.state?.report?.risks ?? []).map((ri) => ({ ...ri, runId: r.id }))
+  );
   const riskiest = allRisks
     .filter((c) => c.risk === "critical" || c.risk === "high")
     .slice(0, 10);
@@ -166,7 +170,7 @@ export default async function OverviewPage() {
             />
             <div className="divide-y divide-base-850">
               {allBugs.slice(0, 4).map((d) => (
-                <Row key={d.id}>
+                <Row key={`${d.runId}-${d.id}`}>
                   <div className="flex items-start gap-2">
                     <Badge tone={d.severity === "critical" ? "danger" : "warn"}>
                       {d.severity}
