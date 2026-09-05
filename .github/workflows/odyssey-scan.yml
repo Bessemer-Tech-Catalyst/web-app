@@ -30,9 +30,7 @@ jobs:
       - name: Start Odyssey scan
         id: start-scan
         run: |
-          TOKEN="${{ secrets.ODYSSEY_CI_TOKEN || 'test_token' }}"
           RESPONSE=$(curl -s -X POST \
-            -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"url\": \"${{ steps.preview.outputs.preview_url }}\"}" \
             "http://localhost:3000/api/runs")
@@ -49,7 +47,6 @@ jobs:
 
       - name: Wait for scan to complete
         run: |
-          TOKEN="${{ secrets.ODYSSEY_CI_TOKEN || 'test_token' }}"
           RUN_ID=${{ steps.start-scan.outputs.run_id }}
           MAX_WAIT=600
           ELAPSED=0
@@ -59,7 +56,6 @@ jobs:
 
           while [ $ELAPSED -lt $MAX_WAIT ]; do
             RESPONSE=$(curl -s \
-              -H "Authorization: Bearer $TOKEN" \
               "http://localhost:3000/api/runs/$RUN_ID")
 
             LIVE=$(echo "$RESPONSE" | jq -r '.live // empty')
@@ -80,9 +76,7 @@ jobs:
 
       - name: Download report markdown
         run: |
-          TOKEN="${{ secrets.ODYSSEY_CI_TOKEN || 'test_token' }}"
           curl -s \
-            -H "Authorization: Bearer $TOKEN" \
             "http://localhost:3000/api/runs/${{ steps.start-scan.outputs.run_id }}/report.md" \
             -o report.md
 
@@ -97,9 +91,7 @@ jobs:
       - name: Fetch run summary data
         id: summary
         run: |
-          TOKEN="${{ secrets.ODYSSEY_CI_TOKEN || 'test_token' }}"
           RESPONSE=$(curl -s \
-            -H "Authorization: Bearer $TOKEN" \
             "http://localhost:3000/api/runs/${{ steps.start-scan.outputs.run_id }}")
 
           BUGS=$(echo "$RESPONSE" | jq '.state.report.bugs | length // 0')
