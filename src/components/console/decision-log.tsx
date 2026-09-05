@@ -39,14 +39,14 @@ export function DecisionLog({ decisions }: { decisions: DecisionEvent[] }) {
         title={
           <span className="flex items-center gap-2">
             Decision log
-            <span className="rounded bg-ember-600/15 px-1.5 py-0.5 font-mono text-[10px] text-ember-400">
+            <span className="rounded border border-ember-600/40 bg-ember-600/15 px-1.5 py-0.5 font-mono text-meta font-medium tabular-nums text-ember-300">
               {count}
             </span>
           </span>
         }
         subtitle="Every autonomous judgment, its reasoning, and the evidence behind it"
       />
-      <div className="max-h-[70vh] min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {count === 0 ? (
           // A log fills from the top, so its waiting state sits where the first entry
           // will — not floating in the middle of the panel it is about to fill.
@@ -59,44 +59,42 @@ export function DecisionLog({ decisions }: { decisions: DecisionEvent[] }) {
             {decisions.map((d) => (
               <li
                 key={d.seq}
-                className="animate-stream-in px-6 py-3.5"
+                className="animate-stream-in px-6 py-4"
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone="ember" mono>
                     {STAGE_META[d.stage].label}
                   </Badge>
                   <Confidence value={d.confidence} />
-                  <span className="ml-auto font-mono text-[10px] text-base-600">
+                  <span className="ml-auto font-mono text-meta tabular-nums text-base-500">
                     {formatClock(d.ts)}
                   </span>
                 </div>
 
-                <p className="mt-2 text-sm font-medium leading-snug text-base-100">
+                <p className="mt-2.5 text-lead font-semibold leading-snug tracking-tight text-base-100">
                   {d.action}
                 </p>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-base-400">
-                  {d.rationale}
-                </p>
+                <p className="mt-1.5 text-body text-base-400">{d.rationale}</p>
 
                 {d.evidence.length > 0 && (
                   <ul className="mt-2.5 space-y-1">
                     {d.evidence.map((e, i) => (
                       <li
                         key={i}
-                        className="flex items-start gap-2 rounded-md bg-base-900 px-2.5 py-1.5"
+                        className="flex items-start gap-2.5 rounded-md border border-base-850 bg-base-900 px-3 py-2"
                       >
                         <span
                           aria-hidden
-                          className="mt-px font-mono text-[11px] leading-4 text-base-600"
+                          className="mt-px font-mono text-meta text-base-500"
                         >
                           {EVIDENCE_ICON[e.kind]}
                         </span>
                         <div className="min-w-0">
-                          <span className="block font-mono text-[11px] leading-4 text-base-400">
+                          <span className="block font-mono text-meta text-base-300">
                             {e.summary}
                           </span>
                           {e.detail ? (
-                            <pre className="mt-1 overflow-x-auto whitespace-pre-wrap font-mono text-[10px] leading-4 text-base-600">
+                            <pre className="mt-1 overflow-x-auto whitespace-pre-wrap font-mono text-meta text-base-500">
                               {e.detail}
                             </pre>
                           ) : null}
@@ -133,14 +131,14 @@ function Confidence({ value }: { value: number | undefined }) {
           <span
             key={i}
             className={cn(
-              "h-2.5 w-0.5 rounded-full",
+              "h-3 w-[3px] rounded-full",
               i < Math.round(value * 5) ? "bg-current" : "bg-base-800",
               tone,
             )}
           />
         ))}
       </span>
-      <span className={cn("font-mono text-[10px] tabular-nums", tone)}>{pct}%</span>
+      <span className={cn("font-mono text-meta font-medium tabular-nums", tone)}>{pct}%</span>
     </span>
   );
 }

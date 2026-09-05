@@ -126,7 +126,7 @@ export function TestBoard({
                         <span
                           aria-hidden
                           className={cn(
-                            "mt-0.75 shrink-0 font-mono text-[9px] text-base-600 transition-transform group-hover:text-base-400",
+                            "mt-0.75 shrink-0 font-mono text-meta text-base-500 transition-transform group-hover:text-base-400",
                             expanded && "rotate-90",
                           )}
                         >
@@ -134,7 +134,7 @@ export function TestBoard({
                         </span>
                         <span
                           className={cn(
-                            "text-[13px] leading-snug transition group-hover:text-base-100",
+                            "text-body leading-snug transition group-hover:text-base-100",
                             status === "pending" ? "text-base-500" : "text-base-200",
                           )}
                         >
@@ -142,29 +142,33 @@ export function TestBoard({
                         </span>
                       </button>
                       <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-3.75">
-                        <span className="font-mono text-[10px] text-base-600">
+                        <span className="font-mono text-meta text-base-500">
                           {t.file}
                         </span>
                         <span
-                          className="font-mono text-[10px] text-ok-400/70"
+                          className="font-mono text-meta text-ok-400"
                           title="Locators verified against the live page"
                         >
                           ⌖ {t.selectorsVerified}/{t.selectorsTotal}
                         </span>
                         {result?.durationMs ? (
-                          <span className="font-mono text-[10px] text-base-600">
+                          <span className="font-mono text-meta text-base-500">
                             {formatDuration(result.durationMs)}
                           </span>
                         ) : null}
                         {result && result.attempt > 1 ? (
-                          <span className="font-mono text-[10px] text-ember-400">
+                          <span className="font-mono text-meta text-ember-400">
                             attempt {result.attempt}
                           </span>
                         ) : null}
                       </div>
 
                       {result?.error ? (
-                        <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap rounded border border-danger-500/20 bg-danger-500/6 px-2 py-1.5 font-mono text-[10px] leading-4 text-danger-400/90">
+                        // The block being red is what says the test failed. Setting the
+                        // eight lines of trace inside it in red as well makes the one
+                        // thing you have to actually read the hardest thing to read, so
+                        // the frame carries the verdict and the text stays plain ink.
+                        <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap rounded border border-danger-500/30 bg-danger-500/8 px-2.5 py-2 font-mono text-meta leading-4 text-base-300">
                           {result.error}
                         </pre>
                       ) : null}
@@ -174,7 +178,7 @@ export function TestBoard({
                           <Badge tone={TRIAGE_META[verdict.verdict].tone}>
                             {TRIAGE_META[verdict.verdict].label}
                           </Badge>
-                          <span className="text-[11px] text-base-500">
+                          <span className="text-meta text-base-500">
                             {TRIAGE_META[verdict.verdict].action} ·{" "}
                             {Math.round(verdict.confidence * 100)}% confident
                           </span>
@@ -198,12 +202,12 @@ export function TestBoard({
                               heal #{h.attempt} · {h.outcome}
                             </Badge>
                             {!h.assertionsIntact && (
-                              <span className="text-[10px] font-medium text-danger-400">
+                              <span className="text-meta font-medium text-danger-400">
                                 assertion guard tripped
                               </span>
                             )}
                           </div>
-                          <p className="mt-1 text-[11px] leading-relaxed text-base-500">
+                          <p className="mt-1 text-meta leading-relaxed text-base-500">
                             {h.summary}
                           </p>
                         </div>
@@ -266,24 +270,24 @@ function SpecSource({ runId, file }: { runId: string; file: string }) {
   return (
     <div className="overflow-hidden rounded border border-base-800 bg-base-950">
       <div className="flex items-center gap-2 border-b border-base-850 px-2.5 py-1.5">
-        <span className="truncate font-mono text-[10px] text-base-500">{file}</span>
+        <span className="truncate font-mono text-meta text-base-500">{file}</span>
         <a
           href={artifactHref(runId, file)}
           target="_blank"
           rel="noreferrer"
-          className="ml-auto shrink-0 font-mono text-[10px] text-base-500 transition hover:text-base-200"
+          className="ml-auto shrink-0 font-mono text-meta text-base-500 transition hover:text-base-200"
         >
           open raw ↗
         </a>
       </div>
       {state.status === "loading" ? (
-        <p className="px-2.5 py-2 font-mono text-[10px] text-base-600">Reading the file…</p>
+        <p className="px-2.5 py-2 font-mono text-meta text-base-500">Reading the file…</p>
       ) : state.status === "error" ? (
-        <p className="px-2.5 py-2 font-mono text-[10px] text-danger-400/90">{state.message}</p>
+        <p className="px-2.5 py-2 font-mono text-meta text-danger-400">{state.message}</p>
       ) : (
         // Capped and scrollable: a spec is routinely longer than the panel it sits in,
         // and a row that grows to 200 lines pushes every other test off the screen.
-        <pre className="max-h-72 overflow-auto px-2.5 py-2 font-mono text-[10px] leading-[1.55] text-base-300">
+        <pre className="max-h-72 overflow-auto px-2.5 py-2 font-mono text-meta leading-[1.55] text-base-300">
           <code>{state.code}</code>
         </pre>
       )}
@@ -303,7 +307,7 @@ function Evidence({ runId, artifacts }: { runId: string; artifacts: ArtifactEven
           target="_blank"
           rel="noreferrer"
           title={a.path}
-          className="rounded border border-base-800 bg-base-900 px-1.5 py-0.5 font-mono text-[10px] text-base-400 transition hover:border-base-700 hover:text-base-100"
+          className="rounded border border-base-800 bg-base-900 px-1.5 py-0.5 font-mono text-meta text-base-400 transition hover:border-base-700 hover:text-base-100"
         >
           {EVIDENCE_LABEL[a.kind] ?? a.kind} ↗
         </a>
@@ -322,13 +326,13 @@ function StatusGlyph({ status }: { status: TestStatus }) {
       cls: "border-violet-500/40 bg-violet-500/12 text-violet-500",
     },
     running: { char: "▸", cls: "border-info-500/40 bg-info-500/12 text-info-500" },
-    pending: { char: "·", cls: "border-base-800 bg-base-850 text-base-600" },
+    pending: { char: "·", cls: "border-base-800 bg-base-850 text-base-500" },
   };
   const { char, cls } = map[status];
   return (
     <span
       className={cn(
-        "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border text-[10px] leading-none",
+        "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border text-meta leading-none",
         cls,
       )}
       title={status}

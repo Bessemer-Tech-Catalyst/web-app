@@ -11,6 +11,9 @@ export type { Tone };
  *
  * The horizontal rhythm is one number — SECTION_X — so a section header, a list
  * row and a table cell all start on the same vertical line down the page.
+ *
+ * Type comes from the named scale in globals.css (text-meta / detail / body /
+ * lead / figure). Nothing here reaches for an arbitrary pixel size.
  */
 
 // --- Section ----------------------------------------------------------------
@@ -63,27 +66,31 @@ export function SectionHeader({
   rule?: boolean;
 }) {
   return (
+    // A header is chrome, and chrome should be told apart from content by where it sits,
+    // not by being the brightest thing in the panel. Every title on this page was pure
+    // white on the same ground as the prose under it, so a reader scanning down could not
+    // see where one panel ended and the next began. The header now sits on its own raised
+    // band closed by a rule, and gives the top of the ramp back to the content — the
+    // judgment, the grade, the failing test — which is what should be brightest.
     <div
       className={cn(
-        "flex items-start justify-between gap-4 py-4",
+        "flex items-start justify-between gap-4 bg-base-900 py-3",
         SECTION_X,
-        rule && "border-b border-base-850",
+        rule && "border-b border-base-800",
         className,
       )}
     >
       <div className="min-w-0">
-        <h2 className="text-[13px] font-semibold tracking-tight text-base-100">
-          {title}
-        </h2>
+        <h2 className="text-body font-semibold tracking-wide text-base-200">{title}</h2>
         {/* The subtitle is a sentence, and a sentence set to the full width of a
             1500px window is a line nobody's eye can track back from. */}
         {subtitle ? (
-          <p className="mt-1 max-w-[68ch] text-xs leading-relaxed text-base-500">
+          <p className="mt-0.5 max-w-[68ch] text-meta leading-relaxed text-base-500">
             {subtitle}
           </p>
         ) : null}
       </div>
-      {right ? <div className="shrink-0 text-xs">{right}</div> : null}
+      {right ? <div className="shrink-0">{right}</div> : null}
     </div>
   );
 }
@@ -184,7 +191,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium leading-none whitespace-nowrap",
+        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-meta font-medium leading-none whitespace-nowrap",
         mono && "font-mono",
         TONE_CLASS[tone],
         className,
@@ -233,7 +240,7 @@ export function Meter({
   label?: string;
 }) {
   const fill: Record<Tone, string> = {
-    neutral: "bg-base-500",
+    neutral: "bg-base-400",
     ember: "bg-ember-500",
     ok: "bg-ok-500",
     warn: "bg-warn-500",
@@ -244,7 +251,7 @@ export function Meter({
   const pct = Math.max(0, Math.min(100, value));
   return (
     <div
-      className={cn("h-1.5 w-full overflow-hidden rounded-full bg-base-800", className)}
+      className={cn("h-1.5 w-full overflow-hidden rounded-full bg-base-850", className)}
       role="meter"
       aria-valuenow={Math.round(pct)}
       aria-valuemin={0}
@@ -267,10 +274,10 @@ export function Empty({
 }: {
   children: ReactNode;
   /**
-   * For a section on a scrolling document, where a centred void the height of a
-   * card is just dead page. The panels in the console keep the centred form —
-   * there the empty state is the whole panel, and it should sit in the middle
-   * of it rather than clinging to the top edge.
+   * For anything that fills from the top — a section on a scrolling document, a
+   * log waiting on its first entry — where a centred void the height of a card
+   * is just dead space. The centred form is for a region whose whole job is to
+   * hold this one message.
    */
   inline?: boolean;
 }) {
@@ -285,7 +292,7 @@ export function Empty({
     );
   }
   return (
-    <div className="flex min-h-28 items-center justify-center px-6 py-10 text-center text-xs text-base-600">
+    <div className="flex min-h-24 items-center justify-center px-6 py-8 text-center text-detail text-base-500">
       {children}
     </div>
   );
@@ -315,18 +322,18 @@ export function Stat({
   };
   return (
     <div className={cn("py-5", SECTION_X)}>
-      <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-base-500">
+      <div className="text-meta font-medium uppercase tracking-[0.08em] text-base-500">
         {label}
       </div>
       <div
         className={cn(
-          "mt-2 text-[28px] leading-none font-semibold tabular-nums",
+          "mt-2 text-figure font-semibold tabular-nums",
           color[tone],
         )}
       >
         {value}
       </div>
-      {hint ? <div className="mt-2 text-xs text-base-600">{hint}</div> : null}
+      {hint ? <div className="mt-2 text-detail text-base-500">{hint}</div> : null}
     </div>
   );
 }
@@ -345,7 +352,7 @@ export function Code({
   return (
     <pre
       className={cn(
-        "overflow-x-auto rounded-md px-3 py-2.5 font-mono text-[11px] leading-relaxed",
+        "overflow-x-auto rounded-md px-3 py-2.5 font-mono text-meta leading-relaxed",
         tone === "add" && "bg-ok-500/10 text-ok-400",
         tone === "remove" && "bg-danger-500/10 text-danger-400",
         !tone && "bg-base-900 text-base-300",
@@ -354,34 +361,5 @@ export function Code({
     >
       <code>{children}</code>
     </pre>
-  );
-}
-
-// --- SampleNotice -----------------------------------------------------------
-
-/**
- * Says, on the page itself, that what is below it is seeded rather than measured.
- *
- * Five surfaces in this console describe a *fleet* — many targets, many runs, a
- * schedule, defects across time — and this build drives one run at a time. Their data is
- * seeded, and unlabelled seeded data on a demo about never faking a number is the one
- * contradiction the product cannot afford. So it is labelled, everywhere it appears,
- * rather than quietly presented or hidden from the navigation.
- */
-export function SampleNotice({ children }: { children?: ReactNode }) {
-  return (
-    <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-violet-500/25 bg-violet-500/[0.06] px-4 py-3">
-      <Badge tone="violet">sample data</Badge>
-      <p className="text-[13px] leading-relaxed text-base-400">
-        {children ?? (
-          <>
-            This page shows the multi-run product around a single run, with seeded data.
-            Nothing here was measured. Everything under{" "}
-            <span className="text-base-200">Past runs</span> and inside any run you open is
-            real, and is written to disk by the run that produced it.
-          </>
-        )}
-      </p>
-    </div>
   );
 }
