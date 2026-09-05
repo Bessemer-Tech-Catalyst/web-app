@@ -90,8 +90,7 @@ A complete GitHub Actions workflow that automatically scans PR preview deploymen
    ```
 
 3. **Add GitHub Secrets**:
-   - `ODYSSEY_URL` = deployed app URL
-   - `dev` = bearer token (same value as env var on deployed app)
+   - `ODYSSEY_CI_TOKEN` = bearer token (can be any value for local testing)
 
 4. **Wire preview URL** in `.github/workflows/odyssey-scan.yml`:
    - Update "Get preview URL" step to pull from your deploy job

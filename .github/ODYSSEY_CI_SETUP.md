@@ -34,79 +34,71 @@ Posts PR comment with summary + link to full report
 1. **Deployed Odyssey instance** — The app must be accessible from GitHub Actions (e.g. Vercel staging, AWS, etc.). It cannot be localhost.
 2. **Your existing PR preview deploy job** — The workflow assumes you have a step that publishes a preview URL (e.g. Vercel, Netlify). The workflow needs you to wire that URL.
 
-## Setup Steps
+## Setup Steps (Local Development)
 
-### Step 1: Set Environment Variable on Deployed Odyssey
-
-On your deployed Odyssey instance, add an environment variable:
-
-```
-ODYSSEY_CI_TOKEN=<generate-a-random-strong-token>
-```
-
-Example: `ODYSSEY_CI_TOKEN=odyssey_sk_1a2b3c4d5e6f7g8h9i0j`
-
-**Important**: This should be a random, hard-to-guess value (not reused anywhere else).
-
-### Step 2: Add GitHub Secrets to the Repository
+### Step 1: Add GitHub Secret
 
 Go to **Settings → Secrets and variables → Actions** and add:
 
 | Secret Name | Value |
 |-------------|-------|
-| `ODYSSEY_URL` | Your deployed Odyssey base URL (e.g., `https://odyssey-staging.vercel.app`) |
-| `dev` | Bearer token value (same as `ODYSSEY_CI_TOKEN` env var on the deployed app) |
+| `ODYSSEY_CI_TOKEN` | Any test token (e.g., `test_token_12345`) |
 
-### Step 3: Wire Preview URL to the Workflow
+### Step 2: Start Local Odyssey Dev Server
 
-Edit `.github/workflows/odyssey-scan.yml` and update the "Get preview URL" step to pull from your actual deploy job:
+Before the workflow runs, start your local Odyssey instance:
 
-**For Vercel Preview Deployments:**
-```yaml
-- name: Get preview URL
-  id: preview
-  run: |
-    preview_url=${{ needs.deploy.outputs.preview_url }}
-    echo "preview_url=$preview_url" >> $GITHUB_OUTPUT
+```bash
+npm run dev
+# Odyssey runs on http://localhost:3000
 ```
 
-**For GitHub Pages / Custom Deploy:**
-Replace the step with your own logic. The step should set `preview_url` output, e.g.:
-```yaml
-- name: Get preview URL
-  id: preview
-  run: |
-    # Example: construct URL from PR number
-    preview_url="https://preview-pr-${{ github.event.pull_request.number }}.example.com"
-    echo "preview_url=$preview_url" >> $GITHUB_OUTPUT
-```
+The workflow will call `http://localhost:3000/api/runs` directly. This requires the workflow to run in an environment where `localhost:3000` is accessible (e.g., on the same machine, in a Docker container, or via port forwarding).
 
-### Step 4: Commit and Deploy
+**Note**: GitHub Actions runners (ubuntu-latest) **cannot** reach `localhost:3000` by default. This setup is meant for:
+- Local testing (running workflow manually with `act`)
+- Docker-based CI (where Odyssey runs in the same container network)
+- Custom self-hosted runners with local access to port 3000
+
+### Step 3: Commit
 
 ```bash
 git add .github/workflows/odyssey-scan.yml
-git commit -m "Wire Odyssey CI workflow to deployment job"
+git commit -m "Configure Odyssey CI for local development"
 git push origin main
 ```
 
-## Testing
+## Testing Locally
 
-### Test 1: Create a PR
+### Option 1: Use `act` (GitHub Actions Local Tester)
 
-1. Create a new PR against the repo
-2. Watch the "Odyssey Scan" action run in the PR's Checks tab
-3. Wait for the workflow to complete (~1-2 minutes)
-4. Verify a comment appears on the PR with:
-   - Coverage score (X/100)
-   - Bugs found
-   - Passed/failed/healed test breakdown
-   - Link to full report
+```bash
+# Install act: https://github.com/nektos/act
 
-### Test 2: Push Another Commit
+# Create a local secrets file (.secrets)
+echo "ODYSSEY_CI_TOKEN=test_token_12345" > .secrets
 
-1. Push a new commit to the same PR
-2. Watch the workflow run again
-3. Verify the PR comment **updates** (not duplicated) with new results
+# In one terminal, start Odyssey
+npm run dev
+
+# In another terminal, run the workflow locally
+act pull_request -s ODYSSEY_CI_TOKEN=test_token_12345
+```
+
+The workflow will call `http://localhost:3000/api/runs` and create a test scan.
+
+### Option 2: Create a Real PR
+
+1. **Start local Odyssey** in one terminal:
+   ```bash
+   npm run dev
+   ```
+
+2. **Create a PR** against the repo
+
+3. Watch the "Odyssey Scan" action in the PR's Checks tab (it will likely fail if running on GitHub's servers, since they can't reach localhost)
+
+4. For local development, use `act` instead (Option 1)
 
 ## Understanding the Workflow
 
