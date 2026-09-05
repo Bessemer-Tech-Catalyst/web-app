@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { Badge, Section, Meter, type Tone } from "@/components/ui/primitives";
+import { Badge, Meter, SampleNotice, Section, type Tone } from "@/components/ui/primitives";
 import { RUN_HISTORY, TARGETS, type Target } from "@/lib/mock-fleet";
 import { formatRelative, hostOf } from "@/lib/format";
 
@@ -29,6 +29,7 @@ export default function TargetsPage() {
       />
 
       <PageBody>
+        <SampleNotice />
         <div className="grid md:grid-cols-2 xl:grid-cols-3">
           {TARGETS.map((t) => {
             const runs = RUN_HISTORY.filter((r) => r.targetId === t.id);

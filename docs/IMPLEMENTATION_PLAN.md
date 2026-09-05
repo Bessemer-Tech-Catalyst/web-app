@@ -963,3 +963,123 @@ of both stages — the ±15 review with its discard gate, and requirement extrac
 quotes — has never been driven by a real model against a real target. Four phases in a row, running
 the thing found defects that reading it had not, and there is no reason to expect this one to be
 the exception.
+
+---
+
+## 15. Phase 7 — the live run that Phase 6 owed, and the three defects it found
+
+§14.7 said this: *"Four phases in a row, running the thing found defects that reading it had not,
+and there is no reason to expect this one to be the exception."* It was not the exception.
+
+`run_90f1c9f5` was the first end-to-end run with a PRD, an intent and credentials all supplied at
+once: ShopLite, `docs/shoplite-prd.md`, *"focus on checkout and authentication flows"*, five
+scenarios, a $1.50 ceiling. It signed in, mapped four routes, planned five scenarios, passed
+critique, and then **quarantined every single one of them.** Execute ran an empty suite, Triage had
+no failures to classify, Heal had nothing to repair, and Report published — correctly, and
+uselessly — a report about nothing, for $0.26.
+
+Every stage behaved exactly as designed. That is what made it worth the money.
+
+### 15.1 The Generator was never given the credentials
+
+Its own quarantine reason, verbatim:
+
+> The live page exposes the sign-in form, protected Products/Basket pages, and the generic
+> invalid-credentials error, but no valid ShopLite password was provided or discoverable for
+> ada@shoplite.test.
+
+The Generator inherits a signed-in browser, so for most scenarios the question never comes up. But
+a scenario about *signed-out* behaviour drops the session deliberately — Phase 5 added the
+`test.use({ storageState: … })` instruction for exactly that — and then it has to type a password
+nothing ever told it. Phase 5 listed "a signed-out scenario versus a signed-in suite" as unverified.
+This is what was wrong with it, and only a run could have said so.
+
+The fix has two halves, in `agents/credentials.ts`:
+
+- **`credentialsBriefing`** puts the username and password into the Planner's and the Generator's
+  prompts, and tells the Generator to write `process.env.ODYSSEY_PASSWORD` into the file rather
+  than the value.
+- **`redactPassword`** then does not trust it. Every quoted occurrence of the password in the
+  emitted code is rewritten to that expression before the file exists on disk, and the rewrite is
+  reported as a tool call. A password that appears *inside* a longer string literal is flagged
+  rather than spliced, because guessing at how to interpolate into someone else's string is how a
+  rewrite turns a working test into a syntax error.
+
+`executor.ts` supplies the value to the Playwright child process, which already had a deliberately
+minimal environment. So the suite is committable: `tests/` holds no secret, and the runner has one.
+
+### 15.2 The Planner was writing scenarios that cannot be walked
+
+Two of the five quarantines were not about credentials at all:
+
+> The live ShopLite application exposes no UI or reachable test hook to configure authentication,
+> catalogue, or basket requests to fail…
+
+The PRD says *"any failure the shopper causes or suffers is shown in the page"* and *"if order
+history cannot be loaded, the page must say so"*. Both are real requirements. Neither is reachable
+from the application's own interface, and a scenario that asks the Generator to reach one produces
+nothing at all — not a weaker test, *nothing*. The scenario slot is spent and the requirement is
+still uncovered, which is strictly worse than never planning it: the run has a risk ledger and a
+PRD trace whose whole job is to report exactly that gap, for free.
+
+Two instructions were added to the Planner, and one to the Generator:
+
+- **One flow per scenario.** The run's actual titles were things like *"Authenticate successfully,
+  reject invalid credentials, and guard protected pages"* — three flows in one slot. Bundling is not
+  more coverage for the budget; it is an all-or-nothing bet, because one unreachable clause
+  quarantines the other two along with it.
+- **Plan only states reachable through the application's own interface** — unless Recon actually
+  observed a control that produces the failure, in which case it is fair game.
+- And the Generator may now **emit the part it can prove and name the clause it dropped**, rather
+  than treating one unreachable clause as a reason to emit nothing.
+
+### 15.3 The orchestrator accepted "ship nothing" and carried on
+
+This is the interesting one, because nothing was broken. The FSM did what it was told: generate,
+then execute. It had two re-plans left in its allowance and spent neither, because "the plan cannot
+be built" was not a condition anything tested for.
+
+The brief names *deciding when to re-plan* as the first thing an orchestrator is for, so:
+
+`orchestrator/regenerate.ts` — `afterGeneration()` returns `proceed`, `replan` or `escalate`. One
+emitted test is enough to proceed (deliberately not a threshold: trading a suite that exists for a
+suite that might be bigger is a bad trade, and the quarantine reasons are usually right). Nothing
+emitted, with allowance left, re-plans — and the directives handed back are the Generator's own
+quarantine sentences, verbatim, because they are the only record of what the live application
+refused to give. Nothing emitted with the allowance spent, or over budget, escalates and says so.
+
+It lives in its own module for the same reason `risk-signals.ts` and `prd-gate.ts` do: a judgment
+that can only be exercised by spending $0.26 and eleven minutes is a judgment nobody re-checks. As
+a pure function it is eight assertions and two milliseconds.
+
+### 15.4 The console was showing seeded data without saying so
+
+Not found by the run — found by reading the console the way a judge would. Five pages describe a
+*fleet*: Overview, Coverage, Defects, Schedule, Targets. This build drives one run at a time, so
+their data is seeded, and the navigation carried a hard-coded `4` on the Defects tab.
+
+On a product whose entire argument is *"every number here is measured or it is not printed"*, that
+is the one contradiction it cannot afford. Every one of those pages now carries a `SampleNotice`
+banner naming itself as seeded, the fabricated nav badge is gone, and `/runs` — which merges real
+runs with seeded history — marks each seeded row `sample`. Labelled, rather than removed: a console
+with no fleet view tells a first-time reader nothing about what the product is for.
+
+### 15.5 Submission artifacts
+
+`SUBMISSION.md` maps every Must Have, Good to Have and Bonus in the brief to the file that
+implements it and the artifact that proves it. `docs/architecture.svg` is the required architecture
+diagram, generated by `scripts/build-architecture.mjs` and embedded in both the README and the deck. `docs/DEMO.md` is the run of show for the video, including a table of what to say when
+something goes wrong on stage. `docs/the-odyssey-deck.pptx` is the deck. `docs/shoplite-prd.md` is
+the PRD the demo run supplies — written against ShopLite as built, with two requirements it
+deliberately does not implement, so the PRD trace has something true to say.
+
+### 15.6 Tests
+
+`pnpm verify` — typecheck, lint and **117 assertions**, up from 101. New:
+
+- `agents/credentials.test.mts` — the rewrite across all three quote styles, the buried-literal case
+  that must be flagged rather than spliced, a password containing regex metacharacters, and that an
+  empty password is a no-op rather than a regex matching everything.
+- `orchestrator/regenerate.test.mts` — proceed on one test, re-plan on none, escalate when the
+  allowance is spent or the budget is gone, that the directives carry the Generator's own sentence,
+  and that an over-budget run which *did* emit tests still runs them.

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { Badge, Section, SectionHeader, Dot, Stat } from "@/components/ui/primitives";
+import { Badge, Dot, SampleNotice, Section, SectionHeader, Stat } from "@/components/ui/primitives";
 import { SCHEDULES, formatCountdown, targetName } from "@/lib/mock-fleet";
 import { formatDuration } from "@/lib/format";
 
@@ -24,6 +24,7 @@ export default function SchedulePage() {
       />
 
       <PageBody>
+        <SampleNotice />
         <Section className="grid divide-y divide-base-850 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           <Stat label="Active schedules" value={enabled.length} hint={`${SCHEDULES.length} configured`} />
           <Stat

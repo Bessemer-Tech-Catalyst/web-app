@@ -296,3 +296,32 @@ export function Code({
     </pre>
   );
 }
+
+// --- SampleNotice -----------------------------------------------------------
+
+/**
+ * Says, on the page itself, that what is below it is seeded rather than measured.
+ *
+ * Five surfaces in this console describe a *fleet* — many targets, many runs, a
+ * schedule, defects across time — and this build drives one run at a time. Their data is
+ * seeded, and unlabelled seeded data on a demo about never faking a number is the one
+ * contradiction the product cannot afford. So it is labelled, everywhere it appears,
+ * rather than quietly presented or hidden from the navigation.
+ */
+export function SampleNotice({ children }: { children?: ReactNode }) {
+  return (
+    <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-violet-500/25 bg-violet-500/[0.06] px-4 py-3">
+      <Badge tone="violet">sample data</Badge>
+      <p className="text-[13px] leading-relaxed text-base-400">
+        {children ?? (
+          <>
+            This page shows the multi-run product around a single run, with seeded data.
+            Nothing here was measured. Everything under{" "}
+            <span className="text-base-200">Past runs</span> and inside any run you open is
+            real, and is written to disk by the run that produced it.
+          </>
+        )}
+      </p>
+    </div>
+  );
+}

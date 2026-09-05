@@ -35,6 +35,7 @@ import { runStructured } from "./harness";
 import { models } from "./models";
 import { generatedTestSchema, type GeneratedTestOutput } from "./schemas";
 import { harvest, prove } from "./locator-provenance";
+import { credentialsBriefing, redactPassword } from "./credentials";
 import {
   STATE_FILE,
   captureStorageState,
@@ -119,7 +120,9 @@ THE FILE
   a test must drop the session for itself, on the line after the imports:
       test.use({ storageState: { cookies: [], origins: [] } });
   Write that only when the scenario genuinely requires an anonymous session, and then
-  write the sign-in steps the scenario needs, since there is no session to inherit.
+  write the sign-in steps the scenario needs, since there is no session to inherit. The
+  run's credentials are given to you below; a signed-out scenario is not a reason to
+  quarantine when you have been handed an account to sign in with.
 - Assert the scenario's expected outcome, specifically enough to fail when it is wrong.
   A test that only asserts the page loaded proves nothing.
 - Use web-first assertions — expect(locator).toBeVisible(), .toHaveText(), .toHaveURL().
@@ -130,7 +133,15 @@ THE FILE
 WHEN TO QUARANTINE
 Return outcome "quarantine" when the scenario's elements are not on this application,
 the state it describes cannot be reached, or the flow needs data that does not exist.
-Name what was missing and where you looked. That is a genuinely useful result and it is
+Name what was missing and where you looked.
+
+Quarantine is for a scenario you cannot write, not for one clause of it you cannot
+reach. If a scenario asks for four things and the live application only offers three —
+it wants a failure state no control can produce, or an empty-history view the account
+you hold cannot reach — write the test for what you *can* prove, assert that much
+specifically, and say in "reason" which clause you dropped and why. Three proven
+assertions and a named omission is a result; nothing at all, because of one unreachable
+clause, is the same coverage as never having planned the scenario. That is a genuinely useful result and it is
 reported as one — a quarantined scenario with a precise reason is worth more to the team
 than a test that fails for a reason nobody can read.`;
 
@@ -294,7 +305,28 @@ export async function generate(
           continue;
         }
 
-        await writeArtifact(ctx.runId, file, out.code.trim() + "\n");
+        // The password, if the agent wrote one, is rewritten to an environment read
+        // before the file exists on disk. See `credentials.ts`.
+        const redacted = redactPassword(out.code.trim(), ctx.input.credentials?.password ?? "");
+        if (redacted.count) {
+          ctx.tool(
+            "generator",
+            "redact_credentials",
+            `${file} — ${redacted.count} literal password occurrence(s) rewritten to ` +
+              "process.env.ODYSSEY_PASSWORD; the runner supplies it.",
+          );
+        }
+        if (redacted.residual) {
+          ctx.tool(
+            "generator",
+            "redact_credentials",
+            `${file} — the password still appears inside a longer string literal, which the ` +
+              "rewrite will not splice. Review the file before committing it.",
+            false,
+          );
+        }
+
+        await writeArtifact(ctx.runId, file, redacted.code + "\n");
         const test: GeneratedTest = {
           id: scenario.id,
           scenarioId: scenario.id,
@@ -352,6 +384,7 @@ function buildInput(ctx: AgentContext, scenario: Scenario, recon: ReconResult | 
       2,
     ),
     "---",
+    ...credentialsBriefing(ctx.input.credentials),
   ];
   if (ctx.input.intent) {
     lines.push("", `The run's stated intent, for context: ${ctx.input.intent}`);

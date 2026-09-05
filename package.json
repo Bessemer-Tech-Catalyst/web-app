@@ -8,7 +8,13 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --test \"src/**/*.test.mts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify": "pnpm typecheck && pnpm lint && pnpm test",
+    "demo:reset": "node scripts/demo-reset.mjs",
+    "demo:drift": "node scripts/demo-reset.mjs --drift --keep-orders",
+    "demo:defect": "node scripts/demo-reset.mjs --defect --keep-orders",
+    "demo:run": "node scripts/demo-run.mjs",
+    "run:tail": "node scripts/tail-run.mjs"
   },
   "dependencies": {
     "@openai/agents": "^0.17.0",

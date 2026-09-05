@@ -22,6 +22,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { PASSWORD_ENV, USERNAME_ENV } from "./credentials";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -191,6 +192,13 @@ function spawnPlaywright(ctx: AgentContext, cli: string, args: string[]): Promis
         // Colour codes in an error message end up in the report and then on screen.
         FORCE_COLOR: "0",
         NO_COLOR: "1",
+        // The run's credentials, for the signed-out tests that have to sign in. They are
+        // here rather than in the spec file on purpose: the emitted suite reads
+        // `process.env.ODYSSEY_PASSWORD` and the Generator's redaction pass guarantees it
+        // holds no literal, so a team can commit `tests/` without committing a password.
+        // See `agents/credentials.ts`.
+        ...(ctx.input.credentials?.username ? { [USERNAME_ENV]: ctx.input.credentials.username } : {}),
+        ...(ctx.input.credentials?.password ? { [PASSWORD_ENV]: ctx.input.credentials.password } : {}),
       },
       stdio: ["ignore", "pipe", "pipe"] as const,
     });

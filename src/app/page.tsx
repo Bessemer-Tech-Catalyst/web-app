@@ -1,15 +1,6 @@
 import Link from "next/link";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
-import {
-  Badge,
-  Dot,
-  Meter,
-  Row,
-  Section,
-  SectionHeader,
-  SplitGrid,
-  Stat,
-} from "@/components/ui/primitives";
+import { Badge, Dot, Meter, Row, SampleNotice, Section, SectionHeader, SplitGrid, Stat } from "@/components/ui/primitives";
 import {
   COVERAGE,
   DEFECTS,
@@ -60,6 +51,9 @@ export default function OverviewPage() {
       />
 
       <PageBody>
+        <SampleNotice>
+          The overview aggregates a fleet of targets and runs; this build drives one run at a time, so the figures below are seeded. Every number inside a run you open is measured by that run.
+        </SampleNotice>
         {/* ---- headline numbers ---- */}
         <Section>
           <SplitGrid cols={4}>

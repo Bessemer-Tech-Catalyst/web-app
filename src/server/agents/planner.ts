@@ -21,6 +21,7 @@ import { runStructured } from "./harness";
 import { models } from "./models";
 import { planSchema, toScenarios } from "./schemas";
 import { renderSpec } from "./spec-format";
+import { credentialsBriefing } from "./credentials";
 import type { AgentContext, PlanRequest, ReconResult } from "../orchestrator/agents";
 import type { Scenario } from "@/lib/types";
 
@@ -39,12 +40,32 @@ wait and snapshot again before you draw a conclusion from it.
 
 What a good plan looks like:
 - Every scenario is independently runnable and bootstraps its own session.
+- **One flow per scenario.** A title joined by "and" — "authenticate successfully, reject
+  invalid credentials, and guard protected pages" — is three scenarios wearing one
+  scenario's clothes. It is not more coverage for the budget: the agent that turns a
+  scenario into a test has to walk the application to *every* state the scenario names,
+  and if one of the three cannot be reached it quarantines the whole thing. Bundling
+  loses the two that would have worked.
 - Steps are what a user does, in order, in plain language.
 - "expected" is a single observable outcome, specific enough to fail on.
 - Coverage spans kinds, not just happy paths. Negative input, permission boundaries,
   error states, edge cases and destructive actions are where real defects live, and a
   plan made only of happy paths will be sent back to you by the Coverage Critic.
 - Priority reflects user and business impact, not how easy the test is to write.
+
+Plan only states a user can reach through the application's own interface. Some
+requirements describe failures nothing on the page can cause — a backend returning 500,
+an expired token, a payment processor declining, an email that has to arrive. A scenario
+that says "make the order service fail, then check the error" cannot be walked, so it
+produces no test at all: it is a scenario spent on nothing. Leave it out. Every surface
+and requirement the plan does not reach is carried into the run's risk ledger and its
+PRD trace and reported as untested, which is true, useful, and costs no budget — whereas
+an unwalkable scenario buys the same coverage and spends a slot.
+
+If the application does expose a control that produces the failure — a maintenance
+toggle, a seeded account, a documented test hook Recon actually observed — then it is
+reachable and worth a scenario. Recon's observations are the evidence for that, not your
+expectations about how such an application is usually built.
 
 Scenario ids are stable slugs, lowercase and hyphenated, derived from the flow and the
 case — "checkout-expired-card", not "scenario-7". If you are revising a plan, a
@@ -140,13 +161,16 @@ async function buildInput(ctx: AgentContext, req: PlanRequest): Promise<string> 
 
   if (prd) {
     lines.push(
-      `Product requirements (${prd.filename}) — every requirement below should be traceable to at least one scenario:`,
+      `Product requirements (${prd.filename}) — every requirement below should be traceable to at least one scenario ` +
+        "*that can actually be walked*. A requirement describing behaviour this application gives you no way to " +
+        "provoke is a gap to be reported, not a scenario to be written:",
       "---",
       prd.text.slice(0, 20_000),
       "---",
     );
   }
 
+  lines.push(...credentialsBriefing(ctx.input.credentials));
   lines.push("", "Recon findings for this application:", await reconDigest(ctx));
 
   if (req.attempt > 1 && req.previous) {

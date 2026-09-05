@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { Badge, Section, SectionHeader, Stat, type Tone } from "@/components/ui/primitives";
+import { Badge, SampleNotice, Section, SectionHeader, Stat, type Tone } from "@/components/ui/primitives";
 import { DEFECTS, targetName } from "@/lib/mock-fleet";
 import { formatRelative } from "@/lib/format";
 import type { Priority } from "@/lib/types";
@@ -34,6 +34,7 @@ export default function DefectsPage() {
       />
 
       <PageBody>
+        <SampleNotice />
         <Section className="grid divide-y divide-base-850 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           <Stat label="Open" value={open.length} tone={open.length ? "danger" : "ok"} />
           <Stat label="Critical" value={critical.length} tone="danger" hint="Blocking a core flow" />

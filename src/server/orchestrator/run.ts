@@ -20,6 +20,7 @@
 import { readFile } from "node:fs/promises";
 import { checkAssertionIntegrity } from "./assertion-guard";
 import { unifiedDiff } from "./patch";
+import { afterGeneration } from "./regenerate";
 import { stubAgents } from "./stub-agents";
 import type { AgentContext, Agents, ReconResult } from "./agents";
 import { headed } from "../browser-mode";
@@ -41,6 +42,16 @@ import {
   type TestResult,
   type TriageOutcome,
 } from "@/lib/types";
+
+/** A critique that never scored anything. Used when an unbuildable plan is sent back. */
+const EMPTY_DIMENSIONS = {
+  "flow-completeness": 0,
+  "negative-paths": 0,
+  "error-states": 0,
+  "edge-cases": 0,
+  "state-variants": 0,
+  destructive: 0,
+} as const;
 
 export interface OrchestratorOptions {
   runId: string;
@@ -159,122 +170,202 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
     return { value };
   });
 
-  // ---- PLAN ⇄ CRITIQUE -----------------------------------------------------
+  // ---- PLAN ⇄ CRITIQUE ⇄ GENERATE ------------------------------------------
+  //
+  // Two nested loops, and the outer one is the judgment the brief asks for by name:
+  // *when to re-plan*. The inner loop re-plans because the Coverage Critic scored the
+  // plan badly. The outer loop re-plans because the plan turned out, on contact with the
+  // live application, to be unbuildable — every scenario quarantined, nothing emitted.
+  //
+  // That distinction was learned from `run_90f1c9f5`, which planned five scenarios the
+  // Critic passed at 84/100, watched the Generator quarantine all five, and then ran
+  // Execute against an empty suite, Triage against no failures, and published a report
+  // about nothing. Every stage behaved correctly and the run was still worthless. A
+  // plan that cannot be built is a planning failure, and the run has a re-plan budget
+  // for exactly that.
   let scenarios: Scenario[] = [];
   let critique: Critique | null = null;
   let attempt = 1;
+  let generationAttempt = 1;
   const critiques: Critique[] = [];
+  let generated: Awaited<ReturnType<Agents["generate"]>> = { tests: [], quarantined: [] };
 
-  for (;;) {
-    scenarios = await stage("plan", attempt, async () => ({
-      value: await agents.plan(ctx, {
-        attempt,
-        directives: critique?.gaps ?? [],
-        previous: scenarios.length ? scenarios : undefined,
-      }),
-    }));
-    emit({ type: "plan.ready", attempt, scenarios });
+  generation: for (;;) {
+    for (;;) {
+      scenarios = await stage("plan", attempt, async () => ({
+        value: await agents.plan(ctx, {
+          attempt,
+          directives: critique?.gaps ?? [],
+          previous: scenarios.length ? scenarios : undefined,
+        }),
+      }));
+      emit({ type: "plan.ready", attempt, scenarios });
 
-    const verdictAttempt = attempt;
-    const graded = await stage("critique", verdictAttempt, async () => {
-      const value = await agents.critique(ctx, { attempt: verdictAttempt, scenarios, recon });
-      emit({ type: "critique.ready", critique: value });
-      return { value, outcome: value.verdict === "replan" ? ("replan" as const) : ("ok" as const) };
-    });
+      const verdictAttempt = attempt;
+      const graded = await stage("critique", verdictAttempt, async () => {
+        const value = await agents.critique(ctx, { attempt: verdictAttempt, scenarios, recon });
+        emit({ type: "critique.ready", critique: value });
+        return { value, outcome: value.verdict === "replan" ? ("replan" as const) : ("ok" as const) };
+      });
 
-    critique = graded;
-    critiques.push(graded);
+      critique = graded;
+      critiques.push(graded);
 
-    // The gate. Re-planning is bounded — an unbounded critic loop is a hung demo.
-    const budgetLeft = attempt <= input.options.maxReplans && !budgetExceeded;
-    if (graded.verdict === "pass") {
+      // The gate. Re-planning is bounded — an unbounded critic loop is a hung demo.
+      const budgetLeft = attempt <= input.options.maxReplans && !budgetExceeded;
+      if (graded.verdict === "pass") {
+        decide(
+          "critique",
+          `Accept the plan at ${graded.score}/100 and proceed to generation`,
+          graded.rationale,
+          [
+            graded.previousScore
+              ? { kind: "heuristic", summary: `Coverage ${graded.previousScore} → ${graded.score} after ${attempt - 1} re-plan` }
+              : { kind: "heuristic", summary: `Coverage ${graded.score}/100 on the first pass` },
+            { kind: "heuristic", summary: `${graded.gaps.length} gaps accepted as out of budget rather than unnoticed` },
+          ],
+        );
+        break;
+      }
+
+      if (!budgetLeft) {
+        decide(
+          "critique",
+          `Proceed at ${graded.score}/100 — the re-plan allowance is spent`,
+          `The plan still scores below threshold, but it has been re-planned ${attempt - 1} time(s) and the ` +
+            `allowance is ${input.options.maxReplans}. Looping further would spend the run's clock on planning ` +
+            "instead of evidence. The unclosed gaps are carried into the risk ledger so nothing is silently dropped.",
+          [
+            { kind: "heuristic", summary: `Score ${graded.score}/100, ${graded.gaps.length} gaps unresolved` },
+            { kind: "heuristic", summary: `maxReplans = ${input.options.maxReplans}` },
+          ],
+        );
+        break;
+      }
+
       decide(
         "critique",
-        `Accept the plan at ${graded.score}/100 and proceed to generation`,
+        `Reject the plan and re-plan with ${graded.gaps.length} targeted directives`,
         graded.rationale,
         [
-          graded.previousScore
-            ? { kind: "heuristic", summary: `Coverage ${graded.previousScore} → ${graded.score} after ${attempt - 1} re-plan` }
-            : { kind: "heuristic", summary: `Coverage ${graded.score}/100 on the first pass` },
-          { kind: "heuristic", summary: `${graded.gaps.length} gaps accepted as out of budget rather than unnoticed` },
+          {
+            kind: "heuristic",
+            summary: Object.entries(graded.dimensions)
+              .filter(([, v]) => v < 60)
+              .map(([k, v]) => `${k} ${v}/100`)
+              .join(", ") || `overall ${graded.score}/100`,
+          },
+          ...recon.evidence.slice(1, 2),
         ],
       );
-      break;
+      attempt++;
     }
 
-    if (!budgetLeft) {
+    // ---- GENERATE ------------------------------------------------------------
+    generated = await stage("generate", generationAttempt, async () => {
+      const value = await agents.generate(ctx, { scenarios });
+      for (const q of value.quarantined) {
+        decide(
+          "generate",
+          `Quarantine "${q.title}" instead of emitting a guessed selector`,
+          q.reason,
+          // The reason *is* the evidence here: it names the element that could not be
+          // resolved, or the locators the provenance check could not account for. A
+          // second, generic line restating it added nothing a reader could check.
+          [{ kind: "selector-provenance", summary: q.reason }],
+        );
+      }
+      const verified = value.tests.reduce((n, t) => n + t.selectorsVerified, 0);
+      const total = value.tests.reduce((n, t) => n + t.selectorsTotal, 0);
       decide(
-        "critique",
-        `Proceed at ${graded.score}/100 — the re-plan allowance is spent`,
-        `The plan still scores below threshold, but it has been re-planned ${attempt - 1} time(s) and the ` +
-          `allowance is ${input.options.maxReplans}. Looping further would spend the run's clock on planning ` +
-          "instead of evidence. The unclosed gaps are carried into the risk ledger so nothing is silently dropped.",
+        "generate",
+        value.tests.length
+          ? `Ship ${value.tests.length} verified tests; hold ${value.quarantined.length} scenarios in quarantine`
+          : `Ship nothing — all ${value.quarantined.length} scenarios failed the provenance check`,
+        value.tests.length
+          ? "A suite where every selector is proven is worth more than a larger suite with guessed " +
+            "locators. Each emitted locator was resolved on the live page by Playwright itself " +
+            "during generation; the held scenarios are reported with reasons rather than dropped, " +
+            "so the team can unblock them deliberately."
+          : "Every scenario either could not be walked to its state or produced code using locators " +
+            "the run never resolved. Emitting them would be guessing, so nothing is emitted. This " +
+            "is a failed generation, not a small suite, and it is reported as one.",
         [
-          { kind: "heuristic", summary: `Score ${graded.score}/100, ${graded.gaps.length} gaps unresolved` },
-          { kind: "heuristic", summary: `maxReplans = ${input.options.maxReplans}` },
+          {
+            kind: "selector-provenance",
+            summary: `${verified}/${total} emitted locators resolved on the live page during generation`,
+          },
         ],
       );
-      break;
-    }
+      return { value, outcome: value.tests.length ? ("ok" as const) : ("replan" as const) };
+    });
 
-    decide(
-      "critique",
-      `Reject the plan and re-plan with ${graded.gaps.length} targeted directives`,
-      graded.rationale,
-      [
-        {
-          kind: "heuristic",
-          summary: Object.entries(graded.dimensions)
-            .filter(([, v]) => v < 60)
-            .map(([k, v]) => `${k} ${v}/100`)
-            .join(", ") || `overall ${graded.score}/100`,
-        },
-        ...recon.evidence.slice(1, 2),
-      ],
-    );
-    attempt++;
+      // The gate. Its rules are in `./regenerate.ts` so they can be checked without a
+      // browser, a model or a key — see `regenerate.test.mts`.
+      const verdict = afterGeneration({
+        emitted: generated.tests.length,
+        quarantined: generated.quarantined,
+        attempt,
+        maxReplans: input.options.maxReplans,
+        overBudget: budgetExceeded,
+      });
+
+      if (verdict.action === "proceed") break generation;
+
+      if (verdict.action === "escalate") {
+        decide(
+          "generate",
+          "Escalate — the plan cannot be built and there is no allowance left to re-plan it",
+          `All ${generated.quarantined.length} scenario(s) were quarantined, so there is no suite to run. ` +
+            (verdict.because === "over-budget"
+              ? "The run is over its budget ceiling, so buying another plan is not available. "
+              : `The re-plan allowance of ${input.options.maxReplans} is spent. `) +
+            "The report that follows is real but carries no execution evidence, and it says so rather " +
+            "than reading as a clean run.",
+          [
+            { kind: "selector-provenance", summary: `${generated.quarantined.length} scenario(s) quarantined, 0 emitted` },
+            { kind: "heuristic", summary: `plan attempt ${attempt} of ${input.options.maxReplans + 1}` },
+          ],
+        );
+        break generation;
+      }
+
+      decide(
+        "generate",
+        "Re-plan — the plan passed critique but could not be built against the live application",
+        `Every one of the ${generated.quarantined.length} scenario(s) was quarantined, so this plan produced no ` +
+          "evidence at all. That is a failure of the plan rather than of the Generator: the scenarios asked for " +
+          "states the application does not expose. Re-planning against the specific reasons costs one of this " +
+          "run's re-plan allowance and is the only move that can still produce a suite; proceeding would spend " +
+          "every remaining stage on an empty suite.",
+        [
+          { kind: "selector-provenance", summary: `0 of ${generated.quarantined.length} scenarios emitted a test` },
+          ...generated.quarantined.slice(0, 2).map((q) => ({
+            kind: "selector-provenance" as const,
+            summary: `${q.title} — ${q.reason}`,
+          })),
+        ],
+      );
+
+      // Handed back through the channel the Planner already revises against. These are
+      // unbuildability directives rather than coverage gaps, and they say so themselves.
+      critique = {
+        attempt,
+        score: critique?.score ?? 0,
+        dimensions: critique?.dimensions ?? EMPTY_DIMENSIONS,
+        verdict: "replan",
+        rationale:
+          "The plan scored well and still produced nothing. Every scenario below was quarantined by the " +
+          "Generator after it walked the live application, so each one has to be re-scoped to a state the " +
+          "application actually exposes — or dropped in favour of one that is reachable.",
+        gaps: verdict.directives,
+      };
+      critiques.push(critique);
+      attempt++;
+      generationAttempt++;
   }
 
   const replans = attempt - 1;
-
-  // ---- GENERATE ------------------------------------------------------------
-  const generated = await stage("generate", 1, async () => {
-    const value = await agents.generate(ctx, { scenarios });
-    for (const q of value.quarantined) {
-      decide(
-        "generate",
-        `Quarantine "${q.title}" instead of emitting a guessed selector`,
-        q.reason,
-        // The reason *is* the evidence here: it names the element that could not be
-        // resolved, or the locators the provenance check could not account for. A
-        // second, generic line restating it added nothing a reader could check.
-        [{ kind: "selector-provenance", summary: q.reason }],
-      );
-    }
-    const verified = value.tests.reduce((n, t) => n + t.selectorsVerified, 0);
-    const total = value.tests.reduce((n, t) => n + t.selectorsTotal, 0);
-    decide(
-      "generate",
-      value.tests.length
-        ? `Ship ${value.tests.length} verified tests; hold ${value.quarantined.length} scenarios in quarantine`
-        : `Ship nothing — all ${value.quarantined.length} scenarios failed the provenance check`,
-      value.tests.length
-        ? "A suite where every selector is proven is worth more than a larger suite with guessed " +
-          "locators. Each emitted locator was resolved on the live page by Playwright itself " +
-          "during generation; the held scenarios are reported with reasons rather than dropped, " +
-          "so the team can unblock them deliberately."
-        : "Every scenario either could not be walked to its state or produced code using locators " +
-          "the run never resolved. Emitting them would be guessing, so nothing is emitted. This " +
-          "is a failed generation, not a small suite, and it is reported as one.",
-      [
-        {
-          kind: "selector-provenance",
-          summary: `${verified}/${total} emitted locators resolved on the live page during generation`,
-        },
-      ],
-    );
-    return { value };
-  });
 
   for (const t of generated.tests) emit({ type: "test.generated", test: t });
 

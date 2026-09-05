@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { Badge, Section, Dot, type Tone } from "@/components/ui/primitives";
+import { Badge, Dot, SampleNotice, Section, type Tone } from "@/components/ui/primitives";
 import { RUN_HISTORY, targetName, type RunHistoryEntry } from "@/lib/mock-fleet";
 import { listRuns } from "@/server/run-store";
 import { formatDuration, formatRelative, formatUsd, hostOf } from "@/lib/format";
@@ -28,9 +28,13 @@ export default async function RunsPage() {
     trigger: "manual" as const,
   }));
 
-  const runs = [...real, ...RUN_HISTORY].sort((a, b) =>
-    b.startedAt.localeCompare(a.startedAt),
-  );
+  // Seeded history is kept — an empty table teaches a first-time reader nothing about
+  // what the console is for — but every seeded row says so on its own line. A real run
+  // and a fixture must never be indistinguishable on the page that lists both.
+  const runs = [
+    ...real.map((r) => ({ ...r, sample: false })),
+    ...RUN_HISTORY.map((r) => ({ ...r, sample: true })),
+  ].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 
   return (
     <>
@@ -47,6 +51,13 @@ export default async function RunsPage() {
         }
       />
       <PageBody>
+        {real.length === 0 ? (
+          <SampleNotice>
+            This instance has not driven a run yet, so every row below is seeded. Start one
+            from <span className="text-base-200">New run</span> and it appears here, above
+            these, without a sample badge.
+          </SampleNotice>
+        ) : null}
         <Section>
           {/* Column heads — mirrored by the row grid below. */}
           <div className="hidden grid-cols-[1.6fr_repeat(5,minmax(0,0.62fr))_auto] gap-3 border-b border-base-850 px-6 py-3 text-[10px] font-medium uppercase tracking-[0.12em] text-base-600 lg:grid">
@@ -81,6 +92,7 @@ export default async function RunsPage() {
                       {r.replans ? (
                         <Badge tone="violet">{r.replans}× re-plan</Badge>
                       ) : null}
+                      {r.sample ? <Badge tone="violet">sample</Badge> : null}
                     </div>
                     <div className="mt-0.5 truncate font-mono text-xs text-base-600">
                       {hostOf(r.url)} · {r.id} · {formatRelative(r.startedAt)}

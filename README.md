@@ -10,6 +10,12 @@ No human between any two of those stages.
 
 > Bessemer Tech Catalyst · AI/ML Track · *Autonomous Test Orchestration Agent*
 
+**Judges start here:** [SUBMISSION.md](SUBMISSION.md) maps every requirement in the brief
+to the file that implements it and the artifact that proves it. The architecture diagram
+is [`docs/architecture.svg`](docs/architecture.svg); the demo run of show, including what
+to do when something goes wrong on stage, is [`docs/DEMO.md`](docs/DEMO.md); the deck is
+[`docs/the-odyssey-deck.pptx`](docs/the-odyssey-deck.pptx).
+
 ---
 
 ## The thesis, in one paragraph
@@ -26,6 +32,11 @@ orchestrator is the product.
 ---
 
 ## Architecture
+
+![The Odyssey — orchestration flow](docs/architecture.svg)
+
+<details>
+<summary>The same diagram as Mermaid, for anywhere that renders it</summary>
 
 ```mermaid
 flowchart TB
@@ -67,13 +78,15 @@ flowchart TB
     FSM -.every transition.-> LOG[["events.ndjson<br/>→ SSE → Decision Log"]]
 ```
 
+</details>
+
 The ★ stages are the ones the brief says nobody builds. They are why this is not a pipeline.
 
 **Every transition emits a `decision` event** carrying its rationale, its confidence and the
 evidence it cites. That append-only log *is* the database, the crash-recovery story, the replay
 mechanism and the demo, all from one file per run.
 
-### The five ideas that make it more than a pipeline
+### The six ideas that make it more than a pipeline
 
 1. **It grades its own test plan before writing a single test.** Six dimensions, scored against
    what Recon actually observed. Below 75 it rejects its own plan and re-plans against the specific
@@ -100,6 +113,14 @@ mechanism and the demo, all from one file per run.
    factors missed is discarded, not merely damped.** *"/forgot-password — 78/100, critical. Touches
    credentials. Named in your PRD. One segment from the landing page. The plan covers it and no
    test ever ran."*
+6. **A plan that cannot be built is a planning failure, and it re-plans.** The Critic can pass a
+   plan at 84/100 that the live application then refuses to yield a single test for — every
+   scenario quarantined, nothing emitted. That happened in `run_90f1c9f5`, and every stage after
+   it behaved correctly: Execute ran an empty suite, Triage had no failures, and the run published
+   a report about nothing. The orchestrator now spends a re-plan on it, handing the Generator's own
+   quarantine reasons back to the Planner as directives — the only record of what the application
+   actually refused. The rule lives in [`orchestrator/regenerate.ts`](src/server/orchestrator/regenerate.ts),
+   away from the state machine's body, so it can be checked without a browser, a model or a key.
 
 ---
 
@@ -117,7 +138,15 @@ echo 'ODYSSEY_REAL_AGENTS=all'  >> .env.local   # omit for the fully-stubbed off
 pnpm dev --port 3002
 ```
 
-Open <http://localhost:3002>, paste a URL, press start. Or drive it over HTTP:
+Open <http://localhost:3002>, paste a URL, press start. Or drive it from the terminal:
+
+```bash
+pnpm demo:reset          # put ShopLite back to a known state between runs
+pnpm demo:run            # ShopLite, with the bundled PRD and an intent
+pnpm run:tail <runId>    # the event log, one legible line per event
+```
+
+Any target, over HTTP:
 
 ```bash
 curl -sS -X POST localhost:3002/api/runs -H 'content-type: application/json' -d '{
@@ -148,6 +177,13 @@ directory a team could commit as-is:
 **Inputs.** The URL is the only required one. Optional: credentials, a PRD, and a sentence of
 intent (*"focus on checkout and authentication"*). Options: `maxScenarios`, `maxReplans`,
 `budgetUsd` (a real ceiling — the stage that spends the money checks it), `parallelWorkers`.
+
+**Credentials do not land in the suite.** A signed-out scenario — rejected credentials, a
+protected route bouncing an anonymous visitor — has to type a password, so the Generator is
+given one. What it writes into the file is `process.env.ODYSSEY_PASSWORD`, and any literal it
+writes anyway is rewritten to that expression before the file exists on disk, with the rewrite
+reported as a tool call. The executor supplies the value to the runner; a human re-running the
+committed suite supplies it themselves. See [`agents/credentials.ts`](src/server/agents/credentials.ts).
 
 **The browser is visible on purpose.** Watching it log in, hunt for a locator and fail is half of
 what makes a run legible. `ODYSSEY_HEADLESS=1` is the server-wide escape hatch for a machine with
@@ -296,7 +332,13 @@ This repo distinguishes "the code exists" from "a real run produced it", and say
 | Generator, Executor | ✅ real, **verified by a green live run** — 2 tests at 14/14 and 20/20 proven locators, `expected: 2, unexpected: 0`, $0.317 |
 | Classifier, Healer, rerun, ShopLite | ✅ real, **verified by a live run** — `run_8b37144b` classified a 500 as `APP_DEFECT` at 0.94 and left it red, healed a renamed control, and had a patch rejected by the assertion guard. $0.161 |
 | Coverage map, risk scoring | ✅ real and **pinned by 41 unit assertions** — arithmetic with a published weight table, no model involved, so it produces a true ledger even with no API key |
-| Risk review pass, PRD traceability | ✅ real, **not yet through a live run.** Both are wired, gated and typed; neither has been driven by a real model against a real target. That is the one thing this phase still owes, and it is stated here rather than implied away |
+| Risk review pass, PRD traceability | ✅ real, **driven by a live run** — `run_90f1c9f5` published a ranked five-surface risk ledger and traced 19 PRD requirements with verbatim quotes. That run also proved the pipeline could produce a report with no execution behind it, which is what idea 6 above now prevents |
+| Re-plan on an unbuildable plan, credential hand-off | ✅ real, **pinned by unit assertions**, and both exist because a live run found the defect they fix |
+
+**The console's fleet-level pages — Overview, Coverage, Defects, Schedule, Targets — describe the
+product around a single run and are driven by seeded data.** Every one of them says so on the page,
+in a banner, rather than presenting the numbers or hiding the pages from the navigation. Everything
+under *Past runs*, and everything inside any run you open, is measured by that run.
 
 The open design question, stated rather than hidden: the storage-state hand-off carries the
 agents' own side effects into the generated suite — if Recon creates a record while crawling, the
@@ -323,9 +365,7 @@ live in front of judges.
 ## Tests
 
 ```bash
-pnpm test        # 101 assertions, ~0.5s, no API and no browser
-pnpm typecheck
-pnpm lint
+pnpm verify      # typecheck · lint · 117 assertions, ~2s, no API and no browser
 ```
 
 They cover the parts where a silent regression would be invisible and expensive — which in this
@@ -343,3 +383,7 @@ repo means the parts that fail by producing a plausible-looking table rather tha
 - **the Markdown report**, for every sentence it must not say: no tick on a requirement with no
   test, no implication that red tests were understood when nothing classified them, and no reading
   as a pass when nothing executed
+- **the re-plan gate**, so an unbuildable plan is re-planned exactly while there is allowance for
+  it, and escalates rather than looping when there is not
+- **the credential rewrite**, including that a password buried in a longer string literal is
+  flagged rather than spliced into a syntax error
