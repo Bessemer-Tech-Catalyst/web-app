@@ -172,7 +172,9 @@ export function RunConsole({ runId }: { runId: string }) {
                 />
               )}
               {tab === "activity" && <ActivityFeed activity={state.activity} />}
-              {tab === "artifacts" && <ArtifactRail artifacts={state.artifacts} />}
+              {tab === "artifacts" && (
+                <ArtifactRail runId={runId} artifacts={state.artifacts} />
+              )}
             </div>
           </div>
         </div>
@@ -248,8 +250,10 @@ function Metric({
 }
 
 function ArtifactRail({
+  runId,
   artifacts,
 }: {
+  runId: string;
   artifacts: { seq: number; kind: string; path: string; title: string }[];
 }) {
   const ICON: Record<string, string> = {
@@ -272,20 +276,26 @@ function ArtifactRail({
         ) : (
           <ul className="divide-y divide-base-850">
             {artifacts.map((a) => (
-              <li
-                key={a.seq}
-                className="animate-stream-in flex items-center gap-2.5 px-6 py-2"
-              >
-                <span
-                  aria-hidden
-                  className="flex size-5 shrink-0 items-center justify-center rounded bg-base-850 font-mono text-[10px] text-base-400"
+              <li key={a.seq} className="animate-stream-in">
+                {/* Openable, not merely named. A run writes real files and a rail that
+                    only lists their paths is describing evidence rather than showing it. */}
+                <a
+                  href={`/api/runs/${runId}/artifacts/${a.path.split("/").map(encodeURIComponent).join("/")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2.5 px-6 py-2 transition hover:bg-base-900/60"
                 >
-                  {ICON[a.kind] ?? "·"}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12px] text-base-200">{a.title}</p>
-                  <p className="truncate font-mono text-[10px] text-base-600">{a.path}</p>
-                </div>
+                  <span
+                    aria-hidden
+                    className="flex size-5 shrink-0 items-center justify-center rounded bg-base-850 font-mono text-[10px] text-base-400"
+                  >
+                    {ICON[a.kind] ?? "·"}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12px] text-base-200">{a.title}</p>
+                    <p className="truncate font-mono text-[10px] text-base-600">{a.path}</p>
+                  </div>
+                </a>
               </li>
             ))}
           </ul>

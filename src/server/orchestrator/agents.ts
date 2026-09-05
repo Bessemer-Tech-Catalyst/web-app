@@ -106,14 +106,39 @@ export interface Agents {
     ctx: AgentContext,
     req: { testId: string; attempt: number; healed: boolean },
   ): Promise<TestResult>;
-  /** Scores the surfaces we found but never covered. */
+  /**
+   * Scores the surfaces we found but never covered.
+   *
+   * `results` is passed in rather than read back off disk because this runs *inside* the
+   * report stage — `report.json` does not exist yet, and a ledger that quietly read an
+   * empty results file would rank every surface as untested and be completely wrong in a
+   * way that looks completely normal.
+   */
   assessRisk(
     ctx: AgentContext,
-    req: { recon: ReconResult; scenarios: Scenario[]; quarantined: string[] },
+    req: {
+      recon: ReconResult;
+      scenarios: Scenario[];
+      /** Held-back scenarios with the reason, carried from `GenerateResult`. */
+      quarantined: { scenarioId: string; reason: string }[];
+      results: TestResult[];
+      /**
+       * The emitted suite. Carried so coverage can be read off the files the Generator
+       * actually wrote, rather than off filenames reconstructed from scenario ids.
+       */
+      tests: GeneratedTest[];
+    },
   ): Promise<RiskItem[]>;
-  /** Maps PRD requirements onto the scenarios that cover them. */
+  /**
+   * Maps PRD requirements onto the scenarios that cover them.
+   *
+   * Takes `results` for the same reason, and for a sharper one: a requirement is only
+   * covered if a test that *ran* stands behind it. Without the results this could only
+   * report which requirements the plan mentions, which is the fake version of this
+   * feature.
+   */
   tracePrd(
     ctx: AgentContext,
-    req: { scenarios: Scenario[] },
+    req: { scenarios: Scenario[]; results: TestResult[] },
   ): Promise<PrdRequirement[] | undefined>;
 }

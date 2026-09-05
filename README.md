@@ -51,14 +51,18 @@ flowchart TB
       RERUN --> REPORT
       BUG --> REPORT
       BACKLOG --> REPORT
-      REPORT[REPORT<br/>coverage · outcomes · heals · risk]
+      REPORT{{"REPORT ★<br/>coverage · outcomes · heals"}}
+      REPORT --> COVER[["COVERAGE MAP<br/>read off the emitted suite,<br/>not off the plan"]]
+      COVER --> RISK{{"RISK LEDGER ★<br/>what we did not test,<br/>scored by fixed factors"}}
+      COVER --> PRD{{"PRD TRACE ★<br/>requirement → test that ran"}}
     end
 
     RECON -.-> MCP[(Playwright MCP<br/>accessibility tree)]
     GENERATE -.-> MCP
     TRIAGE -.-> MCP
     HEAL -.-> MCP
-    REPORT --> OUT([tests/ · report.json · traces · patches])
+    RISK --> OUT([tests/ · report.json · report.md · traces · patches])
+    PRD --> OUT
 
     FSM -.every transition.-> LOG[["events.ndjson<br/>→ SSE → Decision Log"]]
 ```
@@ -87,15 +91,23 @@ mechanism and the demo, all from one file per run.
    diffed before and after every patch, syntactically: delete an assertion, weaken a matcher, flip
    a negation or change an expected value and **the patch is rejected and the test escalates.**
    Every locator the patch *introduces* must have been proven on the live page, too.
-5. **It tells you what it did not test.** Every surface Recon found and the plan never covered,
-   scored for risk. *"Password reset — HIGH RISK, untested. Reachable from the login page, touches
-   credentials, named in section 4 of your PRD."*
+5. **It tells you what it did not test, and it is not guessing.** Which surfaces have no evidence
+   is *read off the emitted suite* — a test that visits `/orders` contains that string in a file we
+   wrote — and crossed with which tests actually ran. What each uncovered surface is worth is
+   computed from fixed, published weights: credentials, money, destructive actions, reachability,
+   whether the PRD names it, and whether the plan tried and the Generator quarantined it. The model
+   sees the arithmetic and may adjust a score by ±15 — **an adjustment that cites nothing the
+   factors missed is discarded, not merely damped.** *"/forgot-password — 78/100, critical. Touches
+   credentials. Named in your PRD. One segment from the landing page. The plan covers it and no
+   test ever ran."*
 
 ---
 
 ## Running it
 
-Requires Node 20+, pnpm, and an OpenAI API key.
+Requires Node 20+ and pnpm. An OpenAI API key is needed for the agents that think; without one
+every stage falls back to a deterministic stand-in and the app still runs end to end — including a
+genuinely computed coverage map and risk ledger, which need no model.
 
 ```bash
 pnpm install
@@ -125,7 +137,12 @@ directory a team could commit as-is:
   heal/patch-*.diff          every accepted patch
   results/                   results.json · traces · videos · screenshots
   selector-provenance.json   which locator was proved, when, for which scenario
-  report.json · events.ndjson
+  coverage.json              every discovered surface and how it was attributed
+  risk.json                  the untested ones, scored, with the factors behind each
+  prd-trace.json             requirement → scenario → did a test actually run
+  report.json                the machine-readable report
+  report.md                  the same report as a document you can put in a PR
+  events.ndjson
 ```
 
 **Inputs.** The URL is the only required one. Optional: credentials, a PRD, and a sentence of
@@ -186,6 +203,89 @@ assertions"*; the syntactic diff disagreed, and the diff wins.
 
 ---
 
+## The final report
+
+The brief's last Must Have names five things: *scenarios covered, pass/fail outcomes, healer
+actions taken, coverage gaps remaining, and untested flow risk.* All five are on
+`/runs/<id>/report`, and all five are also written to `report.md` in the run's workspace — the
+same report as a document you can open a pull request with.
+
+Two of those five are easy to fake, so both are built the same way the defect classifier is: a
+deterministic layer that reproduces exactly, and a model that may only add what the rules could
+not see.
+
+### Untested flow risk
+
+Coverage is **measured, not asserted**. A route counts as exercised when a test that actually ran
+navigates to it — the path appears as a quoted string in a `.spec.ts` file this run wrote — and
+the report prints which signal made each attribution, so a weaker one is visible as a weaker one:
+
+| Signal | What it means |
+|---|---|
+| `navigation` | The emitted code contains the path. The strongest claim available. |
+| `control` | The emitted code drives a control named after the route. It got there by clicking. |
+| `scenario-text` | Only the *plan* names the route. Reported as the plan's word, not the suite's. |
+| `none` | Nothing reached it. |
+
+That yields three states, and the middle one is the point: **`planned-only` — the plan covers this
+surface and no test ever ran.** Intent without evidence, which is worse news than a surface nobody
+thought of, and it is scored accordingly.
+
+Each uncovered surface is then scored by a published weight table (`agents/risk-signals.ts`), so
+the ranking is arithmetic anyone can check:
+
+| Factor | Weight |
+|---|---|
+| Touches credentials, sessions or account recovery | 22 |
+| Handles money or personal data | 20 |
+| Exposes a destructive or privileged action | 18 |
+| Named in the supplied PRD | 18 |
+| The plan covered it and no test ran | 18 |
+| Reachable in ≤2 path segments from the landing page | 12 |
+| Named in a coverage gap the critic never closed | 10 |
+| Behind the session Recon signed in with | 8 |
+
+The thresholds are calibrated against the product's own worked example: credentials + reachable +
+named in the PRD = 52, which must come out **high**. A unit test pins that, so a quiet edit to a
+weight cannot silently re-rank every report the system will ever produce.
+
+The model sees all of this and may adjust a score by at most ±15, or add a risk that has no URL —
+a confirmation modal, a cross-origin payment iframe, an outbound email step. Both powers are
+gated: **an adjustment whose justification names nothing is discarded and the arithmetic stands**,
+and an added surface must cite a Recon observation *by index*, checked against the array. The
+report prints the computed score beside any adjusted one.
+
+Because none of the scoring layer needs a model, **the risk ledger is real even with no API key**.
+
+### PRD-to-test-plan gap analysis
+
+The brief's first Bonus item. A model maps requirements to scenarios; two mechanical checks then
+decide what that mapping is worth.
+
+**An invented scenario id is struck out and counted.** A citation naming a scenario the plan does
+not contain is a false claim, not a weak one, and it lands on exactly the requirement most likely
+to be uncovered. The count is reported — an extraction that invented three references tells you
+how much to trust the other forty.
+
+**A plan is not evidence.** Coverage is resolved through what the run actually did, into four
+states rather than a tick:
+
+| Status | Meaning |
+|---|---|
+| `proven` | A test covering it ran and passed. |
+| `exercised` | A test covering it ran and is red. There is evidence, and it is bad news. |
+| `planned-only` | The plan covers it. No test that ran reached it. **Not covered.** |
+| `uncovered` | Nothing in the plan addresses it. |
+
+That third row is the whole value of the table. The naive version of this feature ticks a
+requirement whose only scenario the Generator quarantined, and tells a team their PRD is covered
+about a flow nothing ever loaded.
+
+Every requirement also carries a **verbatim quote** from the document, so a reader can check the
+extraction against the PRD in seconds rather than trusting it.
+
+---
+
 ## What is real, and what is not
 
 This repo distinguishes "the code exists" from "a real run produced it", and says which is which.
@@ -195,7 +295,8 @@ This repo distinguishes "the code exists" from "a real run produced it", and say
 | Recon, Planner, Coverage Critic | ✅ real, **verified by live runs** — signed in unaided, crawled 11 authenticated routes, scored 62 → replanned → 82 |
 | Generator, Executor | ✅ real, **verified by a green live run** — 2 tests at 14/14 and 20/20 proven locators, `expected: 2, unexpected: 0`, $0.317 |
 | Classifier, Healer, rerun, ShopLite | ✅ real, **verified by a live run** — `run_8b37144b` classified a 500 as `APP_DEFECT` at 0.94 and left it red, healed a renamed control, and had a patch rejected by the assertion guard. $0.161 |
-| Risk ledger, PRD trace | deterministic stand-ins (Phase 6) |
+| Coverage map, risk scoring | ✅ real and **pinned by 41 unit assertions** — arithmetic with a published weight table, no model involved, so it produces a true ledger even with no API key |
+| Risk review pass, PRD traceability | ✅ real, **not yet through a live run.** Both are wired, gated and typed; neither has been driven by a real model against a real target. That is the one thing this phase still owes, and it is stated here rather than implied away |
 
 The open design question, stated rather than hidden: the storage-state hand-off carries the
 agents' own side effects into the generated suite — if Recon creates a record while crawling, the
@@ -222,11 +323,23 @@ live in front of judges.
 ## Tests
 
 ```bash
-pnpm test        # 40 assertions, ~0.5s, no API and no browser
+pnpm test        # 101 assertions, ~0.5s, no API and no browser
 pnpm typecheck
 pnpm lint
 ```
 
-They cover the parts where a silent regression would be invisible and expensive: the locator
-provenance gate, the report-to-test match that once turned a fully green suite into a fully red
-report, the classifier's prior, and the heal diff.
+They cover the parts where a silent regression would be invisible and expensive — which in this
+repo means the parts that fail by producing a plausible-looking table rather than an error:
+
+- **the locator provenance gate**, and the classifier's rule-based prior
+- **the Playwright-report-to-generated-test match**, which once turned a fully green suite into a
+  fully red report
+- **the scenario-to-result join**, which once rendered every row of a fully executed suite as
+  `pending` because the report looked results up under an id only the fixtures ever used
+- **the risk weight table and its thresholds**, calibrated against the product's own worked
+  example so a quiet edit cannot re-rank every report
+- **the PRD gate** — that an invented scenario id is struck out, and that a requirement whose only
+  scenario was quarantined comes back `planned-only` rather than covered
+- **the Markdown report**, for every sentence it must not say: no tick on a requirement with no
+  test, no implication that red tests were understood when nothing classified them, and no reading
+  as a pass when nothing executed

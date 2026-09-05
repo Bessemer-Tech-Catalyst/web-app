@@ -801,3 +801,165 @@ reported `healed`, which is a different fact from `passed` and counted separatel
    worth keeping: **state variance is a first-class property of a test suite**, and one captured
    session per run is an assumption the Planner is free to violate — it was told to cover
    state-variants and it did exactly that.
+
+---
+
+## 14. Phase 6 — the final report, the risk ledger, and PRD traceability
+
+**Status: built, unit-pinned, and not yet through a live run with real agents.** That last clause
+is deliberate and it is the one thing this phase owes. Every prior phase in this repo was marked
+done once before it had ever run, and running it found defects each time; the honest label until a
+real run exists is "built".
+
+Phase 6 closes the brief's **last unclosed Must Have** — *"produce a final test quality report:
+scenarios covered, pass/fail outcomes, healer actions taken, coverage gaps remaining, and untested
+flow risk"* — and its **first Bonus item**, *"PRD-to-test-plan gap analysis"*. `assessRisk` and
+`tracePrd` are real in `agents/index.ts`. Nothing on the `Agents` interface is a stand-in any more.
+
+### 14.1 Coverage is measured off the suite, not off the plan
+
+The tempting build for "untested flow risk" is to ask a model which routes the plan missed. The
+answer reads well, costs a call, and is unfalsifiable. `agents/coverage-map.ts` computes it instead
+from two things already on disk:
+
+1. **The emitted test source.** A test that navigates to `/orders` contains `"/orders"` in a file
+   this run wrote. Matching is bounded on both sides — unbounded, `/order` claims `/orders` and `/`
+   claims every URL in the file — and a query string or a fragment still counts as a visit.
+2. **Whether that test ran.** A scenario is an intention; a scenario the Generator quarantined
+   produced no evidence about the application at all.
+
+Which yields three states rather than a boolean, and the middle one is the finding:
+
+| State | Meaning |
+|---|---|
+| `exercised` | A test that ran reached it. Green or red, there is evidence. |
+| `planned-only` | The plan covers it and no test ran. **Intent without evidence.** |
+| `untested` | Nothing in the plan named it. |
+
+Each row also carries the *signal* behind its attribution — `navigation`, `control`,
+`scenario-text`, `none` — so a weak attribution renders as a weak one. A surface covered only by
+the plan's own wording says so in the report, in those words.
+
+**The bug this found in its own first run.** `readSources` originally rebuilt the spec filename
+from the scenario id, mirroring `generator.ts`'s slug rule. That worked for the real Generator's
+flat `tests/<slug>.spec.ts` and missed every nested path — so the navigation signal vanished
+entirely and the ledger reported every surface as untested, without erroring and while looking
+completely normal. It now reads `GeneratedTest.file`, the path the Generator actually wrote. That
+is the **third** time in this repo a key has been reconstructed instead of carried
+(§12.1 `report-keys`, §14.2 below); each one failed the same silent way.
+
+### 14.2 The scenario-to-result join, which was broken in the report the brief asks for
+
+The report's "Scenarios covered" table looked its results up by `t-${scenario.id}` — a shape only
+`fixtures.ts` ever produced. The real Generator sets `GeneratedTest.id` to the scenario's own id,
+so **on every live run that lookup missed every row and the table rendered a fully executed suite
+as `pending` from top to bottom.** In the one table the brief's final-report requirement names
+first.
+
+Fixed as `lib/report-join.ts`: one matcher, tolerant of all three conventions because saved runs on
+disk carry whichever was current when they ran, pinned by `report-join.test.mts`.
+
+### 14.3 The risk ledger is arithmetic first
+
+`agents/risk-signals.ts` is a published weight table over a path, the PRD text and the unclosed
+critic gaps. Every factor that fires contributes its weight *and writes its own sentence*, so the
+report never has to narrate a number:
+
+| Factor | Weight |
+|---|---|
+| `credentials` | 22 |
+| `payments-pii` | 20 |
+| `destructive` | 18 |
+| `prd-named` | 18 |
+| `quarantined` | 18 |
+| `shallow` | 12 |
+| `named-in-gap` | 10 |
+| `session-gated` | 8 |
+
+The bands are **calibrated against §3.5's own worked example** rather than chosen as round
+numbers: *"Password reset — HIGH risk: reachable from login, touches credentials, named in PRD
+§4"* is credentials + shallow + prd-named = 52, and it has to come out `high`. The same surface
+with a quarantined scenario behind it reaches 70 and tips to `critical`, which is the right order.
+`risk-signals.test.mts` pins that sentence, so a weight edit that stops matching the product's
+description of its own ledger fails the suite.
+
+Then the model, in `agents/risk.ts`, over the whole ledger at once — ranking is comparative. It may
+do exactly two things, and both are gated:
+
+- **Adjust a score by ±15.** There is no browser in this stage, so there is nothing new to have
+  seen: an adjustment is a *reading* of facts already on the page. One whose justification names
+  nothing is **discarded outright** — not damped, as triage damps an unevidenced overrule, because
+  triage's model went and looked and this one did not. The computed score stands and the run says
+  it dropped the adjustment.
+- **Add a surface with no URL** — a modal, a cross-origin payment iframe, an outbound email step.
+  It must cite a Recon observation **by index**, checked against the array. An uncited row is
+  dropped, on the same principle as the Generator's locator gate: an invented HIGH-risk surface is
+  worse than a missing one.
+
+Because none of the scoring needs a model, `stubAgents.assessRisk` computes the **real** ledger
+offline. There used to be a `RISKS` fixture — five hand-written sentences about an application
+nobody had looked at, printing *"Payment provider iframe — card entry, 84/100"* under a run
+against TodoMVC. Deleted. A fixture is only honest where the alternative costs a model call.
+
+### 14.4 PRD traceability, and the two ways it lies
+
+The Bonus item, and the easiest thing here to produce a convincing fake of. A model maps
+requirements to scenarios and `agents/prd-gate.ts` decides what that mapping is worth.
+
+**Invented scenario ids are struck out and counted.** A citation naming a scenario the plan does
+not contain is a false claim, not a weak one, and it lands on exactly the requirement most likely
+to be uncovered. The count is surfaced: an extraction that invented three references is telling you
+how much to trust the other forty.
+
+**A plan is not evidence.** This is the one worth the slide. Coverage resolves through the run's
+own results into four states — `proven`, `exercised`, `planned-only`, `uncovered` — and `covered`
+is true only for the first two. The naive version ticks a requirement whose only scenario the
+Generator quarantined, and tells a team their PRD is covered about a flow nothing ever loaded.
+
+Every requirement carries a **verbatim quote** from the document, which is the cheapest possible
+defence against a confident extraction of requirements the PRD does not contain: a reader checks a
+row in seconds instead of trusting it.
+
+The same gate runs on the stub path. Returning `fx.PRD_TRACE` verbatim printed *"✅ proven"* beside
+a requirement whose only test had **failed** — the single claim this table exists to make
+impossible — and that was visible in the offline demo before anything corrected it.
+
+### 14.5 `report.md`, and serving the evidence
+
+The report is now written twice: `report.json` for the UI and anything mechanical, and `report.md`
+beside the suite it describes — a document a team opens a pull request with, which is what the
+submission's "working prototype a team could adopt" actually means.
+
+`GET /api/runs/:id/artifacts/*` serves the files the report cites, so a screenshot of the page at
+the moment a test died renders in the report instead of appearing as a path on a disk the reader
+does not have. A run workspace is not a public directory, so access clears four independent checks:
+the run id pattern, `path.resolve` containment, an extension allowlist, and a second containment
+check on the **realpath** — because `path.resolve` collapses `..` and knows nothing about symlinks
+while `stat` follows them. `results/state.json` and `browser-profile/` are denied outright ahead of
+all of it: that file is a live session for the application under test.
+
+Verified by probe: `../../../`, percent-encoded traversal, a null byte, a symlink to `/etc/hosts`
+and the storage state all refused; `report.md`, `coverage.json` and the emitted specs all served.
+
+### 14.6 Tests
+
+`pnpm test` — **101 assertions**, up from 40, ~0.5s, no API and no browser. New in this phase:
+
+- `lib/report-join.test.mts` — the join above, including that the last result wins so a heal's
+  re-run beats the failure it replaced.
+- `agents/coverage-map.test.mts` — that a prefix is not a match, that a quarantined scenario leaves
+  its route `planned-only` and never covered, and that a red test still counts as evidence.
+- `agents/risk-signals.test.mts` — the weight table, the bands against §3.5's example, and one
+  property rather than an example: **every factor that fires carries a sentence**, and the score is
+  always the sum of the weights that produced it.
+- `agents/prd-gate.test.mts` — the invented-id strike-out and the four-state resolution.
+- `report-markdown.test.mts` — every sentence the document must not say, plus that a pipe in a
+  scenario title is escaped so it cannot silently eat a table column.
+
+### 14.7 What this phase still owes
+
+A live run. `computeLedger` and `gateTrace` are exercised on every stubbed run, but the model half
+of both stages — the ±15 review with its discard gate, and requirement extraction with its verbatim
+quotes — has never been driven by a real model against a real target. Four phases in a row, running
+the thing found defects that reading it had not, and there is no reason to expect this one to be
+the exception.

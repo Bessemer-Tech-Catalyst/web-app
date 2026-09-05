@@ -16,7 +16,6 @@ import type {
   FiledBug,
   GeneratedTest,
   PrdRequirement,
-  RiskItem,
   Scenario,
   TestResult,
   TriageOutcome,
@@ -521,56 +520,14 @@ export const BUGS: FiledBug[] = [
   },
 ];
 
-export const RISKS: RiskItem[] = [
-  {
-    id: "r1",
-    surface: "/forgot-password — password reset flow",
-    risk: "critical",
-    score: 88,
-    reasons: [
-      "Reachable in one click from the login page",
-      "Touches credentials and sends outbound email",
-      "Named in PRD §2.4",
-      "Quarantined: side-effecting, needs explicit opt-in",
-    ],
-  },
-  {
-    id: "r2",
-    surface: "Payment provider iframe — card entry",
-    risk: "critical",
-    score: 84,
-    reasons: [
-      "Handles PCI-scope data",
-      "Cross-origin iframe with no accessible test hooks",
-      "Blocks the expired-card decline scenario",
-    ],
-  },
-  {
-    id: "r3",
-    surface: "/account/addresses — address book CRUD",
-    risk: "high",
-    score: 66,
-    reasons: [
-      "Destructive delete with no confirmation observed during recon",
-      "Two clicks from the dashboard",
-      "Out of scenario budget this run",
-    ],
-  },
-  {
-    id: "r4",
-    surface: "Concurrent sessions across devices",
-    risk: "medium",
-    score: 41,
-    reasons: ["Requires two browser contexts", "Deferred by the critic as out of budget"],
-  },
-  {
-    id: "r5",
-    surface: "/orders/:id — order history detail",
-    risk: "low",
-    score: 22,
-    reasons: ["Read-only surface", "No mutations observed", "Low PRD emphasis"],
-  },
-];
+/**
+ * There was a `RISKS` fixture here — five hand-written sentences about an application
+ * nobody had looked at, printed under whatever target the run was actually pointed at.
+ * Phase 6 deleted it: the risk ledger's scoring layer is arithmetic over a route list
+ * and needs no model, so `stubAgents.assessRisk` computes the real thing offline
+ * (`agents/risk.ts`, `computeLedger`). A fixture is only honest where the alternative
+ * costs a model call.
+ */
 
 export const PRD_TRACE: PrdRequirement[] = [
   {
