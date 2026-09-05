@@ -15,11 +15,26 @@ const HeroCanvas = dynamic(
   { ssr: false },
 );
 
+/**
+ * Targets worth one click. ShopLite is deliberately not here: it is served by this same
+ * process, so its URL depends on the port this server came up on and cannot be a constant.
+ * It used to be `https://shoplite.demo`, a domain that does not exist — a run started from
+ * that button died at Recon, in front of whoever pressed it. The demo button below asks
+ * the server for its own origin instead.
+ */
 const PRESETS = [
-  { label: "ShopLite", url: "https://shoplite.demo", note: "our demo target — auth, cart, checkout, admin" },
   { label: "TodoMVC", url: "https://demo.playwright.dev/todomvc", note: "Playwright's own demo app" },
   { label: "SauceDemo", url: "https://www.saucedemo.com", note: "classic QA sandbox" },
 ];
+
+interface DemoPreset {
+  url: string;
+  intent: string;
+  credentials: { username: string; password: string };
+  prd: { filename: string; text: string } | null;
+  options: RunOptions;
+  warning?: string;
+}
 
 export function Launcher() {
   const router = useRouter();
@@ -32,6 +47,8 @@ export function Launcher() {
   const [advanced, setAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [filling, setFilling] = useState(false);
+  const [filled, setFilled] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function normalise(raw: string): string | null {
@@ -70,6 +87,43 @@ export function Launcher() {
     } catch (err) {
       setStarting(false);
       setError(err instanceof Error ? err.message : "Could not start the run");
+    }
+  }
+
+  /**
+   * Fill every field with the bundled ShopLite demo, in one click.
+   *
+   * The values come from the server rather than from a constant here, for the two things
+   * a constant gets wrong: the port this server is actually on, and the PRD — which is
+   * read from `docs/shoplite-prd.md`, the same file a judge is invited to check a quote
+   * against. See `app/api/demo/preset/route.ts`.
+   */
+  async function fillDemo() {
+    if (filling || starting) return;
+    setFilling(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/demo/preset");
+      if (!response.ok) throw new Error(`The demo preset endpoint answered ${response.status}`);
+      const preset = (await response.json()) as DemoPreset;
+
+      setUrl(preset.url);
+      setIntent(preset.intent);
+      setUsername(preset.credentials.username);
+      setPassword(preset.credentials.password);
+      setPrd(preset.prd);
+      setOptions(preset.options);
+      // Opened on purpose: the button has just filled in a password and a spend cap, and
+      // a form that quietly changes fields nobody can see is worse than one that does not.
+      setAdvanced(true);
+      setFilled(
+        preset.warning ??
+          `Filled from ${preset.url} — credentials, intent, ${preset.prd?.filename ?? "no PRD"} and a $${preset.options.budgetUsd.toFixed(2)} cap.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load the demo preset");
+    } finally {
+      setFilling(false);
     }
   }
 
@@ -124,8 +178,9 @@ export function Launcher() {
                   onChange={(e) => {
                     setUrl(e.target.value);
                     setError(null);
+                    setFilled(null);
                   }}
-                  placeholder="shoplite.demo"
+                  placeholder="demo.playwright.dev/todomvc"
                   autoComplete="off"
                   spellCheck={false}
                   aria-invalid={!!error}
@@ -151,7 +206,17 @@ export function Launcher() {
               </p>
             ) : (
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                <span className="text-xs text-base-600">Try:</span>
+                <button
+                  type="button"
+                  onClick={fillDemo}
+                  disabled={filling}
+                  title="Target URL, sign-in, intent, PRD and a demo-sized budget — all of it"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-ember-500/40 bg-ember-500/10 px-2.5 py-1 text-xs font-medium text-ember-300 transition hover:border-ember-500/70 hover:bg-ember-500/15 hover:text-ember-200 disabled:opacity-60"
+                >
+                  <span aria-hidden>⚡</span>
+                  {filling ? "Filling…" : "Fill the ShopLite demo"}
+                </button>
+                <span className="ml-1 text-xs text-base-600">or try:</span>
                 {PRESETS.map((p) => (
                   <button
                     key={p.url}
@@ -160,6 +225,7 @@ export function Launcher() {
                     onClick={() => {
                       setUrl(p.url);
                       setError(null);
+                      setFilled(null);
                     }}
                     className="rounded-md border border-base-800 bg-base-850/60 px-2 py-0.5 text-xs text-base-400 transition hover:border-base-700 hover:text-base-200"
                   >
@@ -168,6 +234,9 @@ export function Launcher() {
                 ))}
               </div>
             )}
+            {filled ? (
+              <p className="mt-2 text-xs text-ok-400">{filled}</p>
+            ) : null}
           </div>
 
           {/* ---- optional inputs ---- */}
@@ -254,7 +323,7 @@ export function Launcher() {
               </span>
               <span className="font-mono text-[11px] text-base-600">
                 {options.maxScenarios} scenarios · {options.parallelWorkers} workers · $
-                {options.budgetUsd} cap
+                {options.budgetUsd.toFixed(2)} cap
               </span>
             </button>
 
@@ -280,8 +349,11 @@ export function Launcher() {
                     className="w-full rounded-lg border border-base-800 bg-base-950/80 px-3 py-2 font-mono text-xs text-base-100 placeholder:text-base-600"
                   />
                   <p className="text-xs text-base-600">
-                    Held for the run only, redacted from every log line and never sent to
-                    the model in plain text.
+                    Held for the run only and redacted from every log line. The Generator
+                    is given them, because a signed-out test has to sign in — but what it
+                    writes into the file is{" "}
+                    <code className="font-mono text-base-500">process.env.ODYSSEY_PASSWORD</code>,
+                    and any literal it writes anyway is rewritten before the file is saved.
                   </p>
                 </div>
 
@@ -289,7 +361,7 @@ export function Launcher() {
                   <Slider
                     label="Max scenarios"
                     value={options.maxScenarios}
-                    min={5}
+                    min={3}
                     max={40}
                     onChange={(v) => setOptions((o) => ({ ...o, maxScenarios: v }))}
                   />
@@ -310,9 +382,10 @@ export function Launcher() {
                   <Slider
                     label="Spend cap"
                     value={options.budgetUsd}
-                    min={1}
+                    min={0.5}
                     max={25}
-                    format={(v) => `$${v}`}
+                    step={0.5}
+                    format={(v) => `$${v.toFixed(2)}`}
                     onChange={(v) => setOptions((o) => ({ ...o, budgetUsd: v }))}
                   />
                 </div>
@@ -370,6 +443,7 @@ function Slider({
   min,
   max,
   onChange,
+  step = 1,
   format = String,
 }: {
   label: string;
@@ -377,6 +451,8 @@ function Slider({
   min: number;
   max: number;
   onChange: (v: number) => void;
+  /** The spend cap moves in halves; everything else is a whole number of things. */
+  step?: number;
   format?: (v: number) => string;
 }) {
   const id = `slider-${label.replace(/\s+/g, "-").toLowerCase()}`;
@@ -395,6 +471,7 @@ function Slider({
         type="range"
         min={min}
         max={max}
+        step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-base-800 accent-ember-500"
