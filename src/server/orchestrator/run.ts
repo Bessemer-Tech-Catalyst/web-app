@@ -22,8 +22,12 @@ import { checkAssertionIntegrity } from "./assertion-guard";
 import { unifiedDiff } from "./patch";
 import { afterGeneration } from "./regenerate";
 import { stubAgents } from "./stub-agents";
-import type { AgentContext, Agents, ReconResult } from "./agents";
+import type { AgentContext, Agents, ReconResult, TargetContext } from "./agents";
 import { headed } from "../browser-mode";
+import { probeTarget, profileEvidence } from "../agents/target-profile";
+import { sitePolicy } from "../agents/site-policy";
+import { crawlBudget, deepestPath } from "../agents/route-scope";
+import { errorText } from "../agents/resilience";
 import { runDir, runPath } from "../paths";
 import { reportMarkdown } from "../report-markdown";
 import { writeArtifact } from "../workspace";
@@ -77,6 +81,42 @@ async function readCoverage(runId: string): Promise<SurfaceCoverage[] | undefine
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The map the run falls back to when the crawl itself fails.
+ *
+ * Built entirely from the preflight, so it costs nothing and is available even when no
+ * agent ever ran. It is deliberately honest about being second-best: the routes are the
+ * ones the landing page linked to, the session is anonymous whatever credentials were
+ * supplied, and the first piece of evidence says the crawl failed — so the Critic scores
+ * the plan against a map that admits what it is missing rather than one that looks
+ * complete.
+ */
+function reconFromProfile(target: TargetContext | undefined, why: string): ReconResult {
+  const routes = target ? ["/", ...target.profile.sameOriginPaths].slice(0, 25) : ["/"];
+  return {
+    routes: [...new Set(routes)],
+    // Never claim a session. Recon is the stage that establishes one, and it did not run.
+    authenticated: false,
+    evidence: [
+      {
+        kind: "heuristic",
+        summary: `Recon did not complete (${why.slice(0, 160)}); this map is the preflight's, not a crawl's`,
+      },
+      ...(target
+        ? [
+            {
+              kind: "heuristic" as const,
+              summary:
+                `${target.profile.sameOriginPaths.length} route(s) read from the landing page of ` +
+                `${target.profile.host}; nothing behind a click or a session was seen`,
+            },
+            ...profileEvidence(target.profile),
+          ]
+        : []),
+    ],
+  };
 }
 
 export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunStatus> {
@@ -157,18 +197,125 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
 
   emit({ type: "run.started", runId, input });
 
-  // ---- RECON ---------------------------------------------------------------
-  const recon = await stage<ReconResult>("recon", 1, async () => {
-    const value = await agents.recon(ctx);
+  // ---- PREFLIGHT -----------------------------------------------------------
+  //
+  // Two HTTP GETs, no browser, no model, no money — and they decide four things that
+  // every stage after this one depends on: how far the crawl may go, which hosts it may
+  // touch, whether the run may change anything, and which attribute this application
+  // hangs its test hooks on. Doing it first is what makes the pipeline work on a URL
+  // nobody on the team has ever seen; see `agents/target-profile.ts` for the argument.
+  //
+  // It runs inside the Recon stage rather than as a stage of its own. It is
+  // reconnaissance, it takes a second or two, and giving it its own row on the stage
+  // rail would suggest a phase a reader can watch rather than a thing that has already
+  // happened by the time they look.
+  let target: TargetContext | undefined;
+  try {
+    const profile = await probeTarget(input.url, { signal });
+    const policy = sitePolicy(profile, Boolean(input.credentials));
+    const crawl = crawlBudget({
+      discoveredPaths: profile.sameOriginPaths.length,
+      rendering: profile.rendering,
+      authenticated: Boolean(input.credentials),
+      budgetUsd: input.options.budgetUsd,
+      archetype: profile.archetype,
+    });
+    target = { profile, policy, crawl };
+    ctx.target = target;
+
+    await writeArtifact(runId, "target-profile.json", JSON.stringify(target, null, 2));
+    ctx.artifact("plan", "target-profile.json", `Target profile — ${profile.host}`);
+
+    // A real, named path from this target's own shell, so "3 links deep" reads as a
+    // place rather than an abstraction — the same reason `crawlBriefing` gives Recon one.
+    const example = deepestPath(profile.sameOriginPaths);
+    const exampleDepth = example ? example.split("/").filter(Boolean).length : undefined;
+
     decide(
       "recon",
-      "Compact each page to an interactive-element digest instead of raw HTML",
-      "Raw DOM would consume roughly 40× the tokens and buries the signal. The accessibility " +
-        "tree gives deterministic, nameable targets and keeps the planner inside its context budget.",
-      value.evidence.slice(0, 1),
+      `Size the run to the target: ${crawl.maxSurfaces} surfaces, depth ${crawl.maxDepth}, scoped to ${profile.registrableDomain}` +
+        (policy.mayMutate ? "" : ", read-only"),
+      `Depth defaults to 2 and only widens when the target's own shape calls for it: this one reads as ` +
+        `${profile.archetype === "unknown" ? "an application of unclear shape" : profile.archetype}` +
+        (profile.archetype === "workflow-builder" || profile.archetype === "saas-dashboard"
+          ? ", which nests a real flow several links in, "
+          : ", ") +
+        (input.credentials ? "and credentials open a signed-in half to explore, " : "") +
+        `so depth is set to ${crawl.maxDepth}` +
+        (example
+          ? ` — for scale, the landing page already links \`${example}\` (${exampleDepth} link(s) in)` +
+            (exampleDepth !== undefined && exampleDepth > crawl.maxDepth
+              ? ", which is further than this budget goes; that page is seen and not explored beyond it"
+              : "")
+          : "") +
+        `. The surface count is the number that actually stops the crawl — ${crawl.maxSurfaces} distinct route ` +
+        `templates, sized to this run's $${input.options.budgetUsd.toFixed(2)} ceiling — and both numbers are ` +
+        `enforced between the agent and the browser: a navigation out of scope or past either cap is refused ` +
+        `before Chromium sees it, not merely asked against in the prompt. ` +
+        (policy.mayMutate
+          ? "Credentials were supplied, so the run may exercise flows that change state."
+          : "No credentials and a target that is not ours, so the run is read-only: nothing is submitted, " +
+            "created or sent, and flows that would require it are reported as untested rather than attempted."),
+      profileEvidence(profile),
     );
-    emit({ type: "recon.ready", routes: value.routes, authenticated: value.authenticated });
-    return { value };
+  } catch (err) {
+    // A probe that fails tells us nothing and must cost nothing. The run proceeds
+    // exactly as it did before this stage existed — the host boundary still holds,
+    // because that is derived from the target URL rather than from the probe.
+    ctx.tool(
+      "recon",
+      "preflight",
+      "The preflight probe did not complete; the run continues with default scope and no target briefing",
+      false,
+      errorText(err),
+    );
+  }
+
+  // ---- RECON ---------------------------------------------------------------
+  //
+  // The one stage whose failure used to end the run before anything had been learned.
+  // It is now degraded rather than fatal: the preflight already knows the origin, the
+  // shell's own links and the archetype, so a failed crawl still leaves the Planner a
+  // real — if thinner — map to work from. A run that plans against the landing page is
+  // worth incomparably more than a run that stops, and the report says which one it was.
+  const recon = await stage<ReconResult>("recon", 1, async () => {
+    try {
+      const value = await agents.recon(ctx);
+      decide(
+        "recon",
+        "Compact each page to an interactive-element digest instead of raw HTML",
+        "Raw DOM would consume roughly 40× the tokens and buries the signal. The accessibility " +
+          "tree gives deterministic, nameable targets and keeps the planner inside its context budget.",
+        value.evidence.slice(0, 1),
+      );
+      emit({ type: "recon.ready", routes: value.routes, authenticated: value.authenticated });
+      return { value };
+    } catch (err) {
+      if (signal.aborted) throw err;
+      const fallback = reconFromProfile(target, errorText(err));
+
+      emit({
+        type: "error",
+        stage: "recon",
+        message:
+          `Recon did not complete: ${errorText(err)}. The run continues from the preflight's own map of ` +
+          `${fallback.routes.length} route(s), which is thinner and is reported as such.`,
+        recoverable: true,
+      });
+      decide(
+        "recon",
+        `Degrade rather than stop — plan against ${fallback.routes.length} route(s) the preflight already found`,
+        "The crawl failed, and a failed crawl is not the same as an unreachable application. The preflight " +
+          "read this target's own links out of its landing page before any agent ran, so there is a real map " +
+          "to plan against — smaller, un-authenticated, and missing everything only reachable by clicking. " +
+          "Stopping here would spend the whole run's clock on nothing; proceeding produces a suite over the " +
+          "surfaces we can name, and the risk ledger ranks everything we could not reach with this failure " +
+          "attached as the reason.",
+        fallback.evidence.slice(0, 2),
+      );
+      emit({ type: "recon.ready", routes: fallback.routes, authenticated: fallback.authenticated });
+      return { value: fallback };
+    }
   });
 
   // ---- PLAN ⇄ CRITIQUE ⇄ GENERATE ------------------------------------------

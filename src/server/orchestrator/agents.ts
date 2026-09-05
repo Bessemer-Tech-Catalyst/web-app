@@ -25,6 +25,16 @@ import type {
   TriageOutcome,
 } from "@/lib/types";
 import type { HealProposal } from "./fixtures";
+import type { TargetProfile } from "../agents/target-profile";
+import type { SitePolicy } from "../agents/site-policy";
+import type { CrawlBudget } from "../agents/route-scope";
+
+/** The preflight's findings, bundled so one optional field carries all three. */
+export interface TargetContext {
+  profile: TargetProfile;
+  policy: SitePolicy;
+  crawl: CrawlBudget;
+}
 
 export interface AgentContext {
   runId: string;
@@ -32,6 +42,15 @@ export interface AgentContext {
   /** Absolute path to this run's workspace. Agents write real files here. */
   workspace: string;
   signal: AbortSignal;
+  /**
+   * What the preflight probe learned about the target, and the limits that follow from
+   * it. Set by the orchestrator before Recon; see `agents/target-profile.ts`.
+   *
+   * Optional because the stub agents run with no probe at all and because a probe that
+   * fails must not stop a run — an agent that finds this absent behaves exactly as it
+   * did before this existed, which is the fallback being deliberately boring.
+   */
+  target?: TargetContext;
   /** Narration — what the agent is about to do and why. */
   think(agent: AgentName, text: string): void;
   /**

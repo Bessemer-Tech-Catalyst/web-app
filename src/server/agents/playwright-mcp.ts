@@ -42,6 +42,10 @@ import { profileDir, runPath } from "../paths";
 import { writeArtifact } from "../workspace";
 import { WATCH_OVERLAY } from "./watch-overlay";
 import { STATE_FILE, carriesSession, readStorageState } from "./storage-state";
+import { NavigationGuard } from "./navigation-guard";
+import { registrableDomain } from "./target-profile";
+import { withRetry } from "./resilience";
+import type { TargetContext } from "../orchestrator/agents";
 import type { RunInput } from "@/lib/types";
 
 /** Read-write browsing: enough to log in and drive a form, nothing that executes code. */
@@ -189,6 +193,11 @@ export function createPlaywrightServer(
    * the header. Absent for Recon, and for any run that has not established a session.
    */
   sessionFile?: string,
+  /**
+   * The scope guard this server enforces. Absent only for a run with no preflight, in
+   * which case the server behaves exactly as it did before the guard existed.
+   */
+  guard?: NavigationGuard,
 ): MCPServerStdio {
   const watched = headed();
   const options: ConstructorParameters<typeof MCPServerStdio>[0] = {
@@ -237,15 +246,64 @@ export function createPlaywrightServer(
     toolFilter: { allowedToolNames: TOOLS[agent] },
     clientSessionTimeoutSeconds: 120,
   };
-  return new MCPServerStdio(options);
+  return guard ? new GuardedPlaywrightServer(options, guard) : new MCPServerStdio(options);
 }
 
-/** Runs `body` with a connected server and always closes it, even on abort. */
+/**
+ * Builds the scope guard for one agent's browser.
+ *
+ * Recon is the crawler, so it is the one agent whose surface budget is enforced. The
+ * others keep the host boundary — nothing in this pipeline has any business navigating
+ * to another company's website — and lose the cap, because they revisit surfaces the
+ * plan already chose and a budget refusal would surface to a reader as an unprovable
+ * locator rather than as what it was.
+ *
+ * With no preflight there is no guard and no behaviour change.
+ */
+function guardFor(agent: McpAgent, input: RunInput, target?: TargetContext): NavigationGuard | undefined {
+  let origin: string;
+  let domain: string;
+  if (target) {
+    origin = target.profile.origin;
+    domain = target.profile.registrableDomain;
+  } else {
+    // No probe ran, but the target URL is always known, and the host boundary is worth
+    // holding on its own — it is the half of the guard that is about where the browser
+    // may go rather than about how much it may spend.
+    try {
+      const u = new URL(input.url);
+      origin = u.origin;
+      domain = registrableDomain(u.hostname);
+    } catch {
+      return undefined;
+    }
+  }
+
+  return new NavigationGuard({
+    origin,
+    registrableDomain: domain,
+    robotsDisallow: target?.profile.robotsDisallow,
+    maxSurfaces: target?.crawl.maxSurfaces ?? 20,
+    enforceBudget: agent === "recon" && target !== undefined,
+  });
+}
+
+/**
+ * Runs `body` with a connected server and always closes it, even on abort.
+ *
+ * The connect is retried. Chromium's first start on a machine is the slowest thing in
+ * the run and it is the one most likely to lose a race with the MCP handshake — a
+ * failure there used to end the run before Recon had taken a single snapshot, which is
+ * the most expensive possible moment to fail and the least informative.
+ */
 export async function withPlaywright<T>(
   runId: string,
   input: RunInput,
   agent: McpAgent,
   body: (server: MCPServerStdio) => Promise<T>,
+  target?: TargetContext,
+  /** Narrates a retried connect; the run should not recover silently. */
+  onRetry?: (attempt: number, delayMs: number, error: unknown) => void,
 ): Promise<T> {
   // Recon is the agent that establishes the session, so it is the one agent that cannot
   // be seeded from it. Everyone downstream is, whenever there is something to seed from.
@@ -260,8 +318,32 @@ export async function withPlaywright<T>(
     overlayPath = runPath(runId, "watch-overlay.js");
   }
 
-  const server = createPlaywrightServer(runId, input, agent, overlayPath, sessionFile);
-  await server.connect();
+  const guard = guardFor(agent, input, target);
+
+  // Each attempt builds a *fresh* server. Reconnecting a stdio server whose subprocess
+  // already died reconnects to the dead subprocess, so the retry has to include the
+  // spawn — which is the part that actually failed.
+  const server = await withRetry(
+    async () => {
+      const s = createPlaywrightServer(runId, input, agent, overlayPath, sessionFile, guard);
+      try {
+        await s.connect();
+        return s;
+      } catch (err) {
+        await s.close().catch(() => {});
+        throw err;
+      }
+    },
+    {
+      attempts: 3,
+      baseDelayMs: 1_000,
+      maxDelayMs: 6_000,
+      totalMs: 30_000,
+      signal: undefined,
+      onRetry: ({ attempt, delayMs, error }) => onRetry?.(attempt, delayMs, error),
+    },
+  );
+
   try {
     return await body(server);
   } finally {
@@ -269,4 +351,53 @@ export async function withPlaywright<T>(
       /* the run is already over; a failed close must not mask the real outcome */
     });
   }
+}
+
+/**
+ * `MCPServerStdio` with the guard spliced into `callTool`.
+ *
+ * Only `browser_navigate` is intercepted. In-page clicks are not: a click that happens to
+ * follow a link is indistinguishable from a click that opens a menu at this layer, and
+ * refusing clicks would break the interaction the Generator exists to perform. The
+ * asymmetry is acceptable because a click can only reach what the page links to, whereas
+ * `browser_navigate` can reach anything on the internet — which is the risk actually
+ * worth a control.
+ */
+class GuardedPlaywrightServer extends MCPServerStdio {
+  private readonly guard: NavigationGuard;
+  constructor(options: ConstructorParameters<typeof MCPServerStdio>[0], guard: NavigationGuard) {
+    super(options);
+    this.guard = guard;
+  }
+
+  override async callTool(
+    toolName: string,
+    args: Record<string, unknown> | null,
+    meta?: Record<string, unknown> | null,
+    options?: { signal?: AbortSignal },
+  ) {
+    if (toolName === "browser_navigate" && typeof args?.url === "string") {
+      const verdict = this.guard.check(args.url);
+      if (!verdict.allowed) {
+        return asToolError(
+          NavigationGuard.refusalText(args.url, verdict.reason, this.guard.budgetLeft),
+        );
+      }
+    }
+    return super.callTool(toolName, args, meta, options);
+  }
+}
+
+/**
+ * A refusal in the shape the SDK expects back from a tool call.
+ *
+ * `CallToolResultContent` is an array of content blocks intersected with a little
+ * metadata, so the value is an array carrying `isError`. Built here rather than inline so
+ * there is one place to change if the SDK's content shape moves.
+ */
+function asToolError(text: string): ReturnType<MCPServerStdio["callTool"]> extends Promise<infer T>
+  ? T
+  : never {
+  const content = [{ type: "text" as const, text }];
+  return Object.assign(content, { isError: true }) as never;
 }
