@@ -3,16 +3,29 @@ name: Odyssey Scan
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'URL to scan (e.g., http://localhost:3000 or https://example.com)'
+        required: true
+        default: 'http://localhost:3000'
 
 jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Get preview URL
+      - name: Get target URL
         id: preview
         run: |
-          # Local development: use localhost:3000
-          echo "preview_url=http://localhost:3000" >> $GITHUB_OUTPUT
+          # If manually triggered, use the input URL
+          # If PR trigger, use a default or placeholder
+          if [ -z "${{ github.event.inputs.target_url }}" ]; then
+            TARGET_URL="http://localhost:3000"
+          else
+            TARGET_URL="${{ github.event.inputs.target_url }}"
+          fi
+          echo "preview_url=$TARGET_URL" >> $GITHUB_OUTPUT
+          echo "Target URL: $TARGET_URL"
 
       - name: Start Odyssey scan
         id: start-scan
@@ -105,8 +118,9 @@ jobs:
 
       - name: Write to job summary
         run: |
+          REPORT_URL="http://localhost:3000/runs/${{ steps.start-scan.outputs.run_id }}/report"
           cat >> $GITHUB_STEP_SUMMARY << 'EOF'
-          ## 🧪 Odyssey Test Scan
+          ## 🧪 Odyssey Test Scan Results
 
           | Metric | Value |
           |--------|-------|
@@ -116,11 +130,20 @@ jobs:
           | Failed | ${{ steps.summary.outputs.failed }} |
           | Healed | ${{ steps.summary.outputs.healed }} |
           | Run ID | ${{ steps.start-scan.outputs.run_id }} |
+          | Target URL | ${{ steps.preview.outputs.preview_url }} |
 
-          [📊 View Full Report](${{ secrets.ODYSSEY_URL }}/runs/${{ steps.start-scan.outputs.run_id }}/report)
+          ### 📊 Report Links
+          - **Local View**: http://localhost:3000/runs/${{ steps.start-scan.outputs.run_id }}/report
+          - **Copy Run ID**: `${{ steps.start-scan.outputs.run_id }}`
+
+          ### 📋 How to view the report:
+          1. Copy the Run ID above: `${{ steps.start-scan.outputs.run_id }}`
+          2. Open your local Odyssey app: http://localhost:3000
+          3. Navigate to: `/runs/${{ steps.start-scan.outputs.run_id }}/report`
           EOF
 
       - name: Comment on PR
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
@@ -130,11 +153,13 @@ jobs:
             const failed = ${{ steps.summary.outputs.failed }};
             const healed = ${{ steps.summary.outputs.healed }};
             const runId = '${{ steps.start-scan.outputs.run_id }}';
-            const odysseyUrl = 'http://localhost:3000';
+            const targetUrl = '${{ steps.preview.outputs.preview_url }}';
 
             const marker = '<!-- odyssey-scan-report -->';
             const body = `${marker}
             ## 🧪 Odyssey Test Scan
+
+            **Scanned**: ${targetUrl}
 
             | Metric | Value |
             |--------|-------|
@@ -143,8 +168,9 @@ jobs:
             | Passed | ${passed} |
             | Failed | ${failed} |
             | Healed | ${healed} |
+            | Run ID | \`${runId}\` |
 
-            [📊 View Full Report](${odysseyUrl}/runs/${runId}/report)`;
+            📊 **View Report**: http://localhost:3000/runs/${runId}/report`;
 
             // Find existing comment to update it (idempotent)
             const comments = await github.rest.issues.listComments({
