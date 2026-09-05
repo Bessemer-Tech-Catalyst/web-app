@@ -80,21 +80,25 @@ export function RunConsole({ runId }: { runId: string }) {
             <Badge mono>{runId}</Badge>
           </div>
 
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Metric label="elapsed" value={formatDuration(elapsed)} />
-            <Metric
-              label="spend"
-              value={formatUsd(state.costUsd)}
-              hint={`of ${formatUsd(input.options.budgetUsd)}`}
-              warn={budgetPct > 80}
-            />
-            <Metric
-              label="tokens"
-              value={`${formatTokens(state.tokensIn)}/${formatTokens(state.tokensOut)}`}
-            />
+          <div className="ml-auto flex flex-wrap items-center gap-3">
+            {/* One instrument cluster rather than three floating boxes — these are
+                three readings off the same run and they belong on the same panel. */}
+            <div className="flex items-stretch divide-x divide-base-850 rounded-lg border border-base-850 bg-base-900/60">
+              <Metric label="elapsed" value={formatDuration(elapsed)} />
+              <Metric
+                label="spend"
+                value={formatUsd(state.costUsd)}
+                hint={`of ${formatUsd(input.options.budgetUsd)}`}
+                warn={budgetPct > 80}
+              />
+              <Metric
+                label="tokens"
+                value={`${formatTokens(state.tokensIn)}/${formatTokens(state.tokensOut)}`}
+              />
+            </div>
 
             <span
-              className="flex items-center gap-1.5 rounded-md border border-base-800 bg-base-900 px-2.5 py-1.5 text-[11px] text-base-400"
+              className="flex items-center gap-1.5 text-[11px] text-base-500"
               title={`Event stream: ${status}`}
             >
               <Dot
@@ -139,35 +143,59 @@ export function RunConsole({ runId }: { runId: string }) {
             grade the critic gave the plan it decided on. The critic used to sit on the
             right, above the tabs, which left the tabbed panel a third of a screen tall —
             and that panel holds the feed that streams for the whole run. */}
-        <div className="grid min-h-0 grid-rows-[minmax(0,1.5fr)_minmax(0,1fr)] divide-y divide-base-850 border-b border-base-850 lg:border-b-0 lg:border-r">
+        <div
+          className={cn(
+            "grid min-h-0 divide-y divide-base-850 border-b border-base-850 lg:border-b-0 lg:border-r",
+            // An ungraded plan is a header and a sentence. Holding a third of the
+            // console open for it starves the decision log — which is the panel with
+            // something in it — for the whole first half of a run.
+            state.critiques.length
+              ? "grid-rows-[minmax(0,1.5fr)_minmax(0,1fr)]"
+              : "grid-rows-[minmax(0,1fr)_auto]",
+          )}
+        >
           <DecisionLog decisions={state.decisions} />
           <CritiquePanel critiques={state.critiques} />
         </div>
 
         {/* The whole right column, whichever tab is showing. */}
         <div className="flex min-h-0 flex-col">
-          <div className="flex shrink-0 gap-1 border-b border-base-850 px-4 py-2.5">
-            {(
-              [
-                ["suite", `Suite ${state.tests.length ? `(${state.tests.length})` : ""}`],
-                ["activity", "Activity"],
-                ["artifacts", `Artifacts ${state.artifacts.length ? `(${state.artifacts.length})` : ""}`],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                aria-pressed={tab === key}
-                className={cn(
-                  "rounded-md border px-2.5 py-1 text-xs transition",
-                  tab === key
-                    ? "border-base-700 bg-base-850 text-base-100"
-                    : "border-transparent text-base-500 hover:text-base-300",
-                )}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex shrink-0 items-center border-b border-base-850 px-4 py-2.5">
+            {/* A segmented control, so the three panels read as three views of one
+                thing rather than as three unrelated buttons. */}
+            <div className="flex gap-0.5 rounded-lg border border-base-850 bg-base-900/60 p-0.5">
+              {(
+                [
+                  ["suite", "Suite", state.tests.length],
+                  ["activity", "Activity", state.activity.length],
+                  ["artifacts", "Artifacts", state.artifacts.length],
+                ] as const
+              ).map(([key, label, count]) => (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  aria-pressed={tab === key}
+                  className={cn(
+                    "rounded-md px-3 py-1 text-xs transition",
+                    tab === key
+                      ? "bg-base-800 text-base-100 shadow-sm"
+                      : "text-base-500 hover:text-base-300",
+                  )}
+                >
+                  {label}
+                  {count ? (
+                    <span
+                      className={cn(
+                        "ml-1.5 font-mono text-[10px] tabular-nums",
+                        tab === key ? "text-base-400" : "text-base-600",
+                      )}
+                    >
+                      {count}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* A flex *container*, not just a flex item. Each panel below is
@@ -247,7 +275,7 @@ function Metric({
   warn?: boolean;
 }) {
   return (
-    <div className="rounded-md border border-base-800 bg-base-900 px-2.5 py-1">
+    <div className="px-3 py-1.5">
       <div className="text-[9px] uppercase tracking-wider text-base-600">{label}</div>
       <div
         className={cn(
