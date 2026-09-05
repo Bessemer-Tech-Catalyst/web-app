@@ -1,5 +1,5 @@
 import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { Badge, Meter, SampleNotice, Section, SectionHeader, Stat, type Tone } from "@/components/ui/primitives";
+import { Badge, Meter, Section, SectionHeader, Stat, type Tone } from "@/components/ui/primitives";
 import { COVERAGE, TARGETS, targetName } from "@/lib/mock-fleet";
 import type { Priority } from "@/lib/types";
 
@@ -28,7 +28,6 @@ export default function CoveragePage() {
       />
 
       <PageBody>
-        <SampleNotice />
         <Section className="grid divide-y divide-base-850 sm:grid-cols-4 sm:divide-x sm:divide-y-0">
           <Stat label="Surfaces mapped" value={COVERAGE.length} hint="Across all targets" />
           <Stat label="Scenarios" value={totalScenarios} hint="Generated and executed" />

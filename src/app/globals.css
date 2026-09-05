@@ -2,21 +2,38 @@
 
 /* ---------------------------------------------------------------------------
    The Odyssey — "mission control" theme.
-   Near-black base, molten accent (it's a crucible), semantic status ramp.
+   Graphite base, molten accent (it's a crucible), semantic status ramp.
    --------------------------------------------------------------------------- */
 
 @theme {
-  --color-base-950: oklch(0.145 0.008 265);
-  --color-base-900: oklch(0.178 0.009 265);
-  --color-base-850: oklch(0.208 0.010 265);
-  --color-base-800: oklch(0.245 0.011 265);
-  --color-base-700: oklch(0.318 0.012 265);
-  --color-base-600: oklch(0.432 0.013 265);
-  --color-base-500: oklch(0.556 0.014 265);
-  --color-base-400: oklch(0.665 0.014 265);
-  --color-base-300: oklch(0.775 0.012 265);
-  --color-base-200: oklch(0.868 0.008 265);
-  --color-base-100: oklch(0.945 0.005 265);
+  /* ---------------------------------------------------------------------------
+     Surfaces and ink.
+
+     One rule governs this ramp: **700 and below is structure, 600 and above is
+     ink.** Nothing in the structure range may carry text, and nothing in the ink
+     range may be a background. The gap between 700 (L .350) and 600 (L .582) is
+     deliberately wide so the two ranges cannot be confused at a glance or reached
+     for by accident.
+
+     Every ink step clears WCAG AA against base-950 — the dimmest, 600, sits at
+     4.63:1, so even a timestamp is legible. The previous ramp put its dimmest
+     label ink at 2.46:1, which is why the console read as a grey fog.
+
+     Chroma is near zero: graphite, not blue-slate. Ember below is the only hue
+     with any saturation, which is what makes it read as an accent at all.
+     --------------------------------------------------------------------------- */
+  --color-base-950: oklch(0.150 0.004 265);
+  --color-base-900: oklch(0.194 0.004 265);
+  --color-base-850: oklch(0.230 0.005 265);
+  --color-base-800: oklch(0.276 0.005 265);
+  --color-base-700: oklch(0.350 0.006 265);
+  /* — the divide: structure above, ink below — */
+  --color-base-600: oklch(0.582 0.008 265);
+  --color-base-500: oklch(0.665 0.008 265);
+  --color-base-400: oklch(0.748 0.007 265);
+  --color-base-300: oklch(0.824 0.006 265);
+  --color-base-200: oklch(0.896 0.005 265);
+  --color-base-100: oklch(0.962 0.004 265);
 
   /* Molten — the accent. Reserved for decisions and primary actions. */
   --color-ember-600: oklch(0.585 0.198 42);
@@ -32,14 +49,30 @@
   --color-info-500: oklch(0.680 0.140 245);
   --color-violet-500: oklch(0.660 0.170 300);
 
+  /* ---------------------------------------------------------------------------
+     Type scale. Five sizes, named for the job they do, because a console that
+     reaches for an arbitrary text-[9px] wherever a label felt small ends up with
+     a dozen sizes and no hierarchy. If a new piece of text does not fit one of
+     these, the answer is to pick the closest — not to add a sixth.
+     --------------------------------------------------------------------------- */
+  --text-meta: 0.6875rem; /* 11px — mono readouts, timestamps, eyebrow labels */
+  --text-meta--line-height: 1rem;
+  --text-detail: 0.75rem; /* 12px — secondary prose, list sublines */
+  --text-detail--line-height: 1.125rem;
+  --text-body: 0.8125rem; /* 13px — the default. Most text on the page. */
+  --text-body--line-height: 1.375rem;
+  --text-lead: 0.9375rem; /* 15px — panel titles, the sentence that matters */
+  --text-lead--line-height: 1.4rem;
+  --text-figure: 2rem; /* 32px — a single measured number */
+  --text-figure--line-height: 1;
+
   --font-sans:
     var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono:
     var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
 
   --animate-stream-in: stream-in 0.34s cubic-bezier(0.16, 1, 0.3, 1);
-  --animate-pulse-ring: pulse-ring 2s ease-out infinite;
-  --animate-scan: scan 2.2s linear infinite;
+  --animate-pulse-ring: pulse-ring 2.6s ease-out infinite;
 }
 
 @keyframes stream-in {
@@ -55,22 +88,13 @@
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-ember-500) 55%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in oklch, currentColor 45%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 9px transparent;
+    box-shadow: 0 0 0 5px transparent;
   }
   100% {
     box-shadow: 0 0 0 0 transparent;
-  }
-}
-
-@keyframes scan {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
   }
 }
 
@@ -85,7 +109,8 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Subtle forge glow behind the app shell. */
+/* Subtle forge glow behind the marketing surfaces. Data surfaces paint an opaque
+   ground over it — see `.console-ground`. */
 .forge-bg::before {
   content: "";
   position: fixed;
@@ -103,6 +128,11 @@ body {
       color-mix(in oklch, var(--color-info-500) 7%, transparent),
       transparent 70%
     );
+}
+
+/* An opaque ground for pages that are all readout. Nothing tints the numbers. */
+.console-ground {
+  background: var(--color-base-950);
 }
 
 /* Fine grid — reads as an instrument panel, not a landing page. */

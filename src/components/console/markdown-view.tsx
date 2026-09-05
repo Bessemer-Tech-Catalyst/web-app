@@ -79,32 +79,32 @@ export function MarkdownSheet({
       >
         <div className="flex shrink-0 items-start gap-4 border-b border-base-850 px-5 py-3.5">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[13px] font-semibold text-base-100">{title}</h2>
+            <h2 className="truncate text-body font-semibold text-base-100">{title}</h2>
             {subtitle ? (
-              <p className="truncate font-mono text-[10px] text-base-600">{subtitle}</p>
+              <p className="truncate font-mono text-meta text-base-500">{subtitle}</p>
             ) : null}
           </div>
           <a
             href={href}
             target="_blank"
             rel="noreferrer"
-            className="shrink-0 rounded-md border border-base-800 px-2.5 py-1 text-[11px] text-base-400 transition hover:border-base-700 hover:text-base-100"
+            className="shrink-0 rounded-md border border-base-800 px-2.5 py-1 text-meta text-base-400 transition hover:border-base-700 hover:text-base-100"
           >
             Raw ↗
           </a>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="shrink-0 rounded-md border border-base-800 px-2.5 py-1 text-[11px] text-base-400 transition hover:border-base-700 hover:text-base-100"
+            className="shrink-0 rounded-md border border-base-800 px-2.5 py-1 text-meta text-base-400 transition hover:border-base-700 hover:text-base-100"
           >
             Esc
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {error ? (
-            <p className="text-xs text-danger-400">Could not read this file — {error}</p>
+            <p className="text-detail text-danger-400">Could not read this file — {error}</p>
           ) : text === null ? (
-            <p className="text-xs text-base-500">Reading…</p>
+            <p className="text-detail text-base-500">Reading…</p>
           ) : (
             <MarkdownView text={text} />
           )}
@@ -116,7 +116,7 @@ export function MarkdownSheet({
 
 export function MarkdownView({ text }: { text: string }) {
   return (
-    <div className="space-y-3 text-[13px] leading-relaxed text-base-300">
+    <div className="space-y-3 text-body leading-relaxed text-base-300">
       {blocks(text.split("\n"))}
     </div>
   );
@@ -150,7 +150,7 @@ function blocks(lines: string[]): ReactNode[] {
       out.push(
         <pre
           key={`b${start}`}
-          className="overflow-x-auto rounded-md border border-base-850 bg-base-950 p-3 font-mono text-[11px] leading-5 text-base-300"
+          className="overflow-x-auto rounded-md border border-base-850 bg-base-950 p-3 font-mono text-meta leading-5 text-base-300"
         >
           {body.join("\n")}
         </pre>,
@@ -165,8 +165,8 @@ function blocks(lines: string[]): ReactNode[] {
         level === 1
           ? "text-base font-semibold text-base-100"
           : level === 2
-            ? "text-[13px] font-semibold text-base-100"
-            : "text-[12px] font-semibold uppercase tracking-wide text-base-400";
+            ? "text-body font-semibold text-base-100"
+            : "text-detail font-semibold uppercase tracking-wide text-base-400";
       out.push(
         <p key={key()} className={`${size} ${level > 1 ? "pt-2" : ""}`}>
           {inline(heading[2])}
@@ -191,7 +191,7 @@ function blocks(lines: string[]): ReactNode[] {
       while (i < lines.length && lines[i].includes("|")) rows.push(cells(lines[i++]));
       out.push(
         <div key={`b${start}`} className="overflow-x-auto">
-          <table className="w-full border-collapse text-[12px]">
+          <table className="w-full border-collapse text-detail">
             <thead>
               <tr>
                 {head.map((c, n) => (
@@ -308,7 +308,7 @@ function inline(text: string): ReactNode {
       );
     } else if (token.startsWith("`")) {
       out.push(
-        <code key={k} className="rounded bg-base-850 px-1 py-0.5 font-mono text-[11px] text-base-200">
+        <code key={k} className="rounded bg-base-850 px-1 py-0.5 font-mono text-meta text-base-200">
           {token.slice(1, -1)}
         </code>,
       );
