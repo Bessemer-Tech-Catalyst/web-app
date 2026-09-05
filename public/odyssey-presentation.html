@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Odyssey — Autonomous Test Orchestration</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%);
+      color: #e0e0e0;
+      overflow: hidden;
+    }
+
+    .presentation {
+      display: flex;
+      height: 100vh;
+      position: relative;
+    }
+
+    .slides {
+      flex: 1;
+      display: flex;
+      overflow-x: auto;
+      scroll-behavior: smooth;
+      scroll-snap-type: x mandatory;
+    }
+
+    .slide {
+      min-width: 100%;
+      height: 100vh;
+      scroll-snap-align: start;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 60px;
+      position: relative;
+      background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%);
+    }
+
+    .slide::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: radial-gradient(circle at 20% 50%, rgba(239, 68, 68, 0.1) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .slide-content {
+      position: relative;
+      z-index: 1;
+      max-width: 900px;
+      width: 100%;
+    }
+
+    h1 {
+      font-size: 4rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, #60a5fa 0%, #f87171 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    h2 {
+      font-size: 2.5rem;
+      font-weight: 600;
+      margin-bottom: 40px;
+      color: #93c5fd;
+    }
+
+    h3 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: #bfdbfe;
+    }
+
+    p {
+      font-size: 1.2rem;
+      line-height: 1.8;
+      color: #d0d0d0;
+      margin-bottom: 20px;
+    }
+
+    .subtitle {
+      font-size: 1.3rem;
+      color: #a0a0a0;
+      margin-bottom: 10px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-top: 30px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 30px;
+      margin-top: 30px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 30px;
+      backdrop-filter: blur(10px);
+    }
+
+    .card h3 {
+      margin-top: 0;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #60a5fa;
+      margin-bottom: 10px;
+    }
+
+    .stat-label {
+      font-size: 0.95rem;
+      color: #a0a0a0;
+    }
+
+    .feature-list {
+      list-style: none;
+      margin-top: 30px;
+    }
+
+    .feature-list li {
+      padding: 15px 0;
+      padding-left: 40px;
+      position: relative;
+      font-size: 1.1rem;
+      color: #d0d0d0;
+    }
+
+    .feature-list li::before {
+      content: '✓';
+      position: absolute;
+      left: 0;
+      color: #60a5fa;
+      font-weight: bold;
+      font-size: 1.3rem;
+    }
+
+    .stage {
+      background: rgba(96, 165, 250, 0.1);
+      border-left: 4px solid #60a5fa;
+      padding: 20px;
+      margin: 15px 0;
+      border-radius: 4px;
+    }
+
+    .stage h4 {
+      color: #93c5fd;
+      margin-bottom: 10px;
+      font-size: 1.1rem;
+    }
+
+    .controls {
+      position: absolute;
+      bottom: 30px;
+      right: 30px;
+      display: flex;
+      gap: 15px;
+      z-index: 10;
+    }
+
+    button {
+      background: rgba(96, 165, 250, 0.2);
+      border: 1px solid #60a5fa;
+      color: #60a5fa;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: all 0.3s;
+    }
+
+    button:hover {
+      background: rgba(96, 165, 250, 0.3);
+    }
+
+    .slide-counter {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      color: #808080;
+      font-size: 0.95rem;
+    }
+
+    .pipeline {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 30px;
+    }
+
+    .pipeline-stage {
+      background: linear-gradient(90deg, rgba(96, 165, 250, 0.1) 0%, transparent 100%);
+      border-left: 4px solid #60a5fa;
+      padding: 15px 20px;
+      border-radius: 4px;
+      font-size: 0.95rem;
+    }
+
+    .pipeline-arrow {
+      text-align: center;
+      color: #60a5fa;
+      font-size: 1.2rem;
+      margin: -5px 0;
+    }
+
+    .comparison-table {
+      width: 100%;
+      margin-top: 30px;
+      border-collapse: collapse;
+    }
+
+    .comparison-table th,
+    .comparison-table td {
+      padding: 15px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .comparison-table th {
+      background: rgba(96, 165, 250, 0.1);
+      color: #93c5fd;
+      font-weight: 600;
+    }
+
+    .comparison-table tr:hover {
+      background: rgba(96, 165, 250, 0.05);
+    }
+
+    .positive {
+      color: #4ade80;
+    }
+
+    .negative {
+      color: #f87171;
+    }
+
+    code {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      color: #93c5fd;
+    }
+
+    .cta-button {
+      display: inline-block;
+      background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+      color: white;
+      padding: 15px 40px;
+      border-radius: 8px;
+      font-weight: 600;
+      text-decoration: none;
+      margin-top: 30px;
+      transition: transform 0.3s;
+    }
+
+    .cta-button:hover {
+      transform: scale(1.05);
+    }
+
+    .keyboard-hint {
+      position: absolute;
+      bottom: 10px;
+      left: 30px;
+      font-size: 0.85rem;
+      color: #606060;
+    }
+
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2rem;
+      }
+      h2 {
+        font-size: 1.5rem;
+      }
+      p {
+        font-size: 1rem;
+      }
+      .grid-2,
+      .grid-3 {
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+      .slide {
+        padding: 40px 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="presentation">
+    <div class="slides" id="slides">
+      <!-- Slide 1: Title -->
+      <div class="slide">
+        <div class="keyboard-hint">← → Arrow keys to navigate</div>
+        <div class="slide-content">
+          <h1>The Odyssey</h1>
+          <p class="subtitle">Autonomous End-to-End Test Orchestration Platform</p>
+          <p style="margin-top: 60px; font-size: 1.3rem; color: #a0a0a0;">
+            Transform a bare URL into a comprehensive test suite, executed intelligently, with real quality insights.
+          </p>
+          <div class="grid-3" style="margin-top: 80px;">
+            <div class="stat">
+              <div class="stat-value">0→100</div>
+              <div class="stat-label">URL to test suite in seconds</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">88/100</div>
+              <div class="stat-label">Avg coverage score</div>
+            </div>
+            <div class="stat">
+              <div class="stat-value">95%</div>
+              <div class="stat-label">Test writing time saved</div>
+            </div>
+          </div>
+        </div>
+        <div class="slide-counter">1 / 12</div>
+      </div>
+
+      <!-- Slide 2: Problem Statement -->
+      <div class="slide">
+        <div class="slide-content">
+          <h2>The Testing Problem</h2>
+          <div class="grid-2" style="margin-top: 50px;">
+            <div>
+              <h3 style="color: #f87171;">Current Reality</h3>
+              <ul class="feature-list">
+                <li>Manual test writing takes weeks</li>
+                <li>Tests break with every UI change</li>
+                <li>False positives hide real bugs</li>
+                <li>No baseline for tracking improvements</li>
+                <li>Expensive to run at scale</li>
+              </ul>
+            </div>
+            <div>
+              <h3 style="color: #60a5fa;">The Odyssey Solution</h3>
+              <ul class="feature-list">
+                <li>30-second automated generation</li>
+                <li>Self-healing locators</li>
+                <li>AI-powered failure classification</li>
+                <li>Run-over-run comparison & trends</li>
+                <li>Cost-optimized execution</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="slide-counter">2 / 12</div>
+      </div>
+
+      <!-- Slide 3: The Pipeline -->
+      <div class="slide">
+        <div class="slide-content">
+          <h2>The 8-Stage Pipeline</h2>
+          <div class="pipeline">
+            <div class="pipeline-stage"><strong>1. RECON</strong> — Crawl the site, find all routes</div>
+            <div class="pipeline-arrow">↓</div>
+            <div class="pipeline-stage"><strong>2. PLAN</strong> — Write test scenarios</div>
+            <div class="pipeline-arrow">↓</div>
+            <div class="pipeline-stage"><strong>3. CRITIQUE</strong> — Score coverage, request gaps</div>
+            <div class="pipeline-arrow">↓</div>
+            <div class="pipeline-stage"><strong>4. GENERATE</strong> — Resolve locators, write tests</div>
+            <div class="pipeline-arrow">↓</div>
+            <div class="pipeline-stage"><strong>5. EXECUTE</strong> — Run tests in parallel</div>
+            <div class="pipeline-arrow">↓</div>
+            <div class="pipeline-stage"><strong>6. TRIAGE</strong> — Classify failures intelligently</div>
+            <div class="pipeline-arrow">↓</div>
+            <div class="pipeline-stage"><strong>7. HEAL</strong> — Fix broken locators</div>
+            <div class="pipeline-arrow">↓</div>
+            <div class="pipeline-stage"><strong>8. REPORT</strong> — Synthesize quality metrics</div>
+          </div>
+        </div>
+        <div class="slide-counter">3 / 12</div>
+      </div>
+
+      <!-- Slide 4: Key Features -->
+      <div class="slide">
+        <div class="slide-content">
+          <h2>Core Capabilities</h2>
+          <div class="grid-2" style="margin-top: 40px;">
+            <div class="card">
+              <h3>🎯 Accuracy</h3>
+              <p>Real browser automation with AI-powered failure classification. 90%+ confidence on every decision.</p>
+            </div>
+            <div class="card">
+              <h3>🚀 Speed</h3>
+              <p>Generate 15-scenario suite in 30 seconds. Execute in parallel. Live streaming results.</p>
+            </div>
+            <div class="card">
+              <h3>💰 Cost Efficiency</h3>
+              <p>Pay only for what you use. Budget guards prevent runaway costs. Full visibility per stage.</p>
+            </div>
+            <div class="card">
+              <h3>📊 Insights</h3>
+              <p>Coverage gaps, risk scoring, PRD traceability, trend tracking with run comparison.</p>
+            </div>
+            <div class="card">
+              <h3>🔧 Maintainability</h3>
+              <p>Automated locator repair. Assertion integrity guards. Self-healing tests.</p>
+            </div>
+            <div class="card">
+              <h3>📈 Scalability</h3>
+              <p>Multi-site dashboard. Aggregated metrics. Fleet-wide statistics.</p>
+            </div>
+          </div>
+        </div>
+        <div class="slide-counter">4 / 12</div>
+      </div>
+
+      <!-- Slide 5: Intelligent Failure Classification -->
+      <div class="slide">
+        <div class="slide-content">
+          <h2>Intelligent Failure Classification</h2>
+          <p style="margin-bottom: 40px;">Every failure is classified into one of 4 categories with 90%+ confidence:</p>
+          <div class="grid-2">
+            <div class="stage">
+              <h4>🐛 App Defect</h4>
+              <p>Genuine bug in the application. File report, notify team.</p>
+            </div>
+            <div class="stage">
+              <h4>🔧 Script Drift</h4>
+              <p>Locator broke, but app works. Route to automatic healing.</p>
+            </div>
+            <div class="stage">
+              <h4>⚡ Flake</h4>
+              <p>Transient failure (network timeout, race). Retry automatically.</p>
+            </div>
+            <div class="stage">
+              <h4>📝 Plan Error</h4>
+              <p>Test scenario doesn't match reality. Send back to planner.</p>
+            </div>
+          </div>
+          <p style="margin-top: 40px; text-align: center; color: #93c5fd;">
+            Result: Zero false positives. Real bugs surface with evidence.
+          </p>
+        </div>
+        <div class="slide-counter">5 / 12</div>
+      </div>
+
+      <!-- Slide 6: Real Browser Testing -->
+      <div class="slide">
+        <div class="slide-content">
+          <h2>Real Playwright Automation</h2>
+          <div class="grid-2" style="margin-top: 50px;">
+            <div>
+              <h3 style="color: #60a5fa;">Not Mock Data</h3>
+              <ul class="feature-list">
+                <li>Real Playwright browsers</li>
+                <li>Live navigation & clicks</li>
+                <li>Screenshots on failure</li>
+                <li>Video capture available</li>
+                <li>Parallel execution</li>
+              </ul>
+            </div>
+            <div>
+              <h3 style="color: #60a5fa;">Test Generation</h3>
+              <ul class="feature-list">
+                <li>Resolve every locator first</li>
+                <li>Quarantine unmatchable tests</li>
+                <li>Real .spec.ts files</li>
+                <li>Playwright syntax</li>
+                <li>Run immediately</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="slide-counter">6 / 12</div>
+      </div>
+
+      <!-- Slide 7: Quality Report -->
+      <div class="slide">
+        <div class="slide-content">
+          <h2>Comprehensive Quality Report</h2>
+          <div class="grid-2" style="margin-top: 40px;">
+            <div class="stage">
+              <h4>Coverage Score</h4>
+              <p>0-100 rubric across 6 dimensions: flow completeness, negative paths, error states, edge cases, state variants, destructive actions</p>
+            </div>
+            <div class="stage">
+              <h4>Test Results</h4>
+              <p>Pass/fail/healed breakdown with failure evidence: screenshots, console errors, network logs, assertion diffs</p>
+            </div>
+            <div class="stage">
+              <h4>Bugs Filed</h4>
+              <p>Every genuine defect captured with severity, confidence score, and supporting evidence</p>
+            </div>
+            <div class="stage">
+              <h4>Risk Ledger</h4>
+              <p>Untested surfaces ranked by blast radius, showing what's missing and what could break</p>
+            </div>
+            <div class="stage">
+              <h4>PRD Traceability</h4>
+              <p>Requirement-by-requirement matrix showing proven, exercised, planned-only, or uncovered</p>
+            </div>
+            <div class="stage">
+              <h4>Healing Actions</h4>
+              <p>Locator repairs documented with before/after diffs and assertion integrity verification</p>
+            </div>
+          </div>
+        </div>
+        <div class="slide-counter">7 / 12</div>
+      </div>
+
+      <!-- Slide 8: Compare & Track -->
+      <div class="slide">
+        <div class="slide-content">
+          <h2>Compare & Track Improvements</h2>
+          <p style="margin-bottom: 40px;">Run your test twice. Compare the results. See what improved.</p>
+          <table class="comparison-table">
+            <tr>
+              <th style="width: 40%;">Metric</th>
+              <th style="width: 30%;">Run 1 (Before)</th>
+              <th style="width: 30%;">Run 2 (After)</th>
+            </tr>
+            <tr>
+              <td>Coverage Score</td>
+              <td>85/100</td>
+              <td>88/100</td>
+            </tr>
+            <tr>
+              <td>Pass Rate</td>
+              <td>80%</td>
+              <td class="positive">86% ↑</td>
+            </tr>
+            <tr>
+              <td>Bugs Filed</td>
+              <td>3</td>
+              <td class="positive">1 ↓</td>
+            </tr>
+            <tr>
+              <td>Locators Healed</td>
+              <td>2</td>
+              <td class="positive">0 ↓</td>
+            </tr>
+            <tr>
+              <td>Cost</td>
+              <td>$0.42</td>
+              <td class="positive">$0.38 ↓</td>
+            </tr>
+          </table>
+          <p style="margin-top: 40px; text-align: center; color: #93c5fd; font-weight: 600;">
+            Concrete evidence: Quality improved, stability improved, cost decreased
+          </p>
+        </div>
+        <div class="slide-counter">8 / 12</div>
+      </div>
+
+      <!-- Slide 9: Multi-Site Dashboard -->
+      <div class="slide">
+        <div class="slide-content">
+          <h2>Master Sites Dashboard</h2>
+          <p style="margin-bottom: 40px;">Monitor all your applications in one place:</p>
+          <div class="card" style="margin-bottom: 30px;">
+            <h3 style="margin-top: 0;">Fleet Overview</h3>
+            <div class="grid-3" style="margin-bottom: 20px;">
+              <div class="stat">
+                <div class="stat-value">24</div>
+                <div class="stat-label">Tracked Sites</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value">847</div>
+                <div class="stat-label">Total Test Runs</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value">87%</div>
+                <div class="stat-label">Avg Coverage</div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3 style="margin-top: 0;">Per-Site Metrics</h3>
+            <ul style="list-style: none; margin: 0;">
+              <li style="padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">example.com — 85% coverage, 82% pass rate, 2 bugs</li>
+              <li style="padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">api.example.com — 92% coverage, 96% pass rate, 0 bugs</li>
+              <li style="padding: 10px 0;">admin.example.com — 78% coverage, 75% pass rate, 5 bugs</li>
+            </ul>
+          </div>
+        </div>
+        <div class="slide-counter">9 / 12</div>
+      </div>
+
+      <!-- Slide 10: Getting Started -->
+      <div class="slide">
+        <div class="slide-content">
+          <h2>Quick Start: 3 Steps</h2>
+          <div style="margin-top: 60px;">
+            <div class="stage">
+              <h4>Step 1: Navigate to New Run</h4>
+              <code>https://localhost:3000/new</code>
+            </div>
+            <div class="stage">
+              <h4>Step 2: Enter Your URL</h4>
+              <p>URL: https://example.com<br>Intent: (optional) "Focus on checkout flows"<br>Credentials: (optional) username/password</p>
+            </div>
+            <div class="stage">
+              <h4>Step 3: Click Run & Watch</h4>
+              <p>Live console shows test generation, execution, classification in real-time. Full report in 30-60 seconds.</p>
+            </div>
+          </div>
+          <p style="margin-top: 60px; text-align: center; font-size: 1.1rem;">
+            <strong>Result:</strong> Full test suite + quality report delivered automatically
+          </p>
+        </div>
+        <div class="slide-counter">10 / 12</div>
+      </div>
+
+      <!-- Slide 11: Technology Stack -->
+      <div class="slide">
+        <div class="slide-content">
+          <h2>Technology Stack</h2>
+          <div class="grid-2" style="margin-top: 50px;">
+            <div>
+              <h3 style="color: #93c5fd;">Frontend</h3>
+              <ul class="feature-list">
+                <li>Next.js 16 (App Router)</li>
+                <li>Tailwind CSS + Design System</li>
+                <li>Server Components</li>
+                <li>Real-time SSE Streams</li>
+                <li>TypeScript</li>
+              </ul>
+            </div>
+            <div>
+              <h3 style="color: #93c5fd;">Backend</h3>
+              <ul class="feature-list">
+                <li>Node.js + TypeScript</li>
+                <li>Playwright Automation</li>
+                <li>Claude API (AI)</li>
+                <li>File-backed Storage</li>
+                <li>NDJSON Event Logs</li>
+              </ul>
+            </div>
+          </div>
+          <p style="margin-top: 60px; text-align: center; color: #a0a0a0;">
+            <strong>No external database required.</strong> Everything works locally. Deploy anywhere Node.js runs.
+          </p>
+        </div>
+        <div class="slide-counter">11 / 12</div>
+      </div>
+
+      <!-- Slide 12: Call to Action -->
+      <div class="slide">
+        <div class="slide-content">
+          <h1 style="font-size: 3rem;">Ready to Transform Testing?</h1>
+          <p style="margin-top: 60px; font-size: 1.3rem; text-align: center; color: #d0d0d0;">
+            The Odyssey automates what takes weeks to do manually.<br>
+            No test writing. No maintenance burden. Just real quality.
+          </p>
+          <div style="text-align: center; margin-top: 80px;">
+            <p style="margin-bottom: 40px; color: #a0a0a0;">Start testing now:</p>
+            <a href="http://localhost:3000" class="cta-button">Open The Odyssey →</a>
+          </div>
+          <div style="margin-top: 100px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 40px;">
+            <p style="font-size: 0.95rem; color: #606060;">
+              Built with Claude AI, Playwright, and Next.js<br>
+              Open source. Self-hosted. Your data stays yours.
+            </p>
+          </div>
+        </div>
+        <div class="slide-counter">12 / 12</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button onclick="prevSlide()">← Prev</button>
+      <button onclick="nextSlide()">Next →</button>
+    </div>
+  </div>
+
+  <script>
+    let currentSlide = 0;
+    const slidesContainer = document.getElementById('slides');
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+
+    function goToSlide(n) {
+      currentSlide = (n + totalSlides) % totalSlides;
+      const offset = currentSlide * 100;
+      slidesContainer.style.transform = `translateX(-${offset}%)`;
+    }
+
+    function nextSlide() {
+      goToSlide(currentSlide + 1);
+    }
+
+    function prevSlide() {
+      goToSlide(currentSlide - 1);
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') nextSlide();
+      if (e.key === 'ArrowLeft') prevSlide();
+    });
+
+    // Initialize
+    goToSlide(0);
+  </script>
+</body>
+</html>
