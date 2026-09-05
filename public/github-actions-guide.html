@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitHub Actions CI Integration</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background: linear-gradient(135deg, #0f0f0f 0%, #1a1a1a 100%); color: #e0e0e0; line-height: 1.6; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
+    h1 { font-size: 2.5rem; margin-bottom: 10px; background: linear-gradient(135deg, #60a5fa 0%, #f87171 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    h2 { font-size: 1.8rem; margin-top: 40px; margin-bottom: 20px; color: #93c5fd; }
+    h3 { font-size: 1.2rem; margin-top: 20px; margin-bottom: 10px; color: #bfdbfe; }
+    p { margin-bottom: 15px; color: #d0d0d0; }
+    .section { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 30px; margin-bottom: 30px; backdrop-filter: blur(10px); }
+    .flow-diagram { background: rgba(96, 165, 250, 0.05); border-left: 4px solid #60a5fa; padding: 20px; margin: 20px 0; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 0.95rem; }
+    .step { margin: 10px 0; }
+    .arrow { color: #60a5fa; text-align: center; margin: 5px 0; }
+    code { background: rgba(0, 0, 0, 0.3); padding: 2px 6px; border-radius: 3px; color: #93c5fd; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+    .card { background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.3); border-radius: 8px; padding: 20px; }
+    .card h4 { color: #93c5fd; margin-bottom: 10px; }
+    .badge { display: inline-block; background: rgba(96, 165, 250, 0.2); border: 1px solid #60a5fa; color: #60a5fa; padding: 5px 12px; border-radius: 20px; font-size: 0.85rem; margin-right: 10px; margin-bottom: 10px; }
+    .success { color: #4ade80; }
+    .warning { color: #facc15; }
+    table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+    th { background: rgba(96, 165, 250, 0.1); color: #93c5fd; font-weight: 600; }
+    tr:hover { background: rgba(96, 165, 250, 0.05); }
+    .cta { display: inline-block; background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%); color: white; padding: 12px 30px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 20px; }
+    .cta:hover { transform: scale(1.05); transition: transform 0.3s; }
+    ul { margin-left: 20px; margin-bottom: 15px; }
+    li { margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 GitHub Actions CI Integration</h1>
+    <p style="font-size: 1.1rem; color: #a0a0a0; margin-bottom: 40px;">Automatic PR preview scanning with Odyssey test orchestration</p>
+
+    <div class="section">
+      <h2>Architecture</h2>
+      <p>When a PR is created or updated, the workflow automatically:</p>
+      <ol style="margin-left: 20px; margin-bottom: 20px;">
+        <li>Gets the PR's preview deployment URL</li>
+        <li>Calls the deployed Odyssey app with a bearer token</li>
+        <li>Starts an automated test scan of that URL</li>
+        <li>Polls for completion (max 10 minutes)</li>
+        <li>Exports the full test report</li>
+        <li>Posts a comment on the PR with results</li>
+      </ol>
+
+      <div class="flow-diagram">
+        <div class="step">PR Created/Updated</div>
+        <div class="arrow">↓</div>
+        <div class="step">GitHub Actions triggered</div>
+        <div class="arrow">↓</div>
+        <div class="step">Deploy job publishes preview URL</div>
+        <div class="arrow">↓</div>
+        <div class="step">Odyssey workflow fetches URL</div>
+        <div class="arrow">↓</div>
+        <div class="step">POST /api/runs with Bearer token</div>
+        <div class="arrow">↓</div>
+        <div class="step">Poll GET /api/runs/[id] until done</div>
+        <div class="arrow">↓</div>
+        <div class="step">GET /api/runs/[id]/report.md</div>
+        <div class="arrow">↓</div>
+        <div class="step">Post idempotent PR comment</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Key Features</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h4>✅ Automatic</h4>
+          <p>Triggers on every PR open, sync, or reopen. No manual triggers needed.</p>
+        </div>
+        <div class="card">
+          <h4>🔒 Secure</h4>
+          <p>Bearer-token auth protects API endpoints. Backward-compatible when token not set.</p>
+        </div>
+        <div class="card">
+          <h4>📊 Real Testing</h4>
+          <p>Tests the actual PR preview deployment, not main branch.</p>
+        </div>
+        <div class="card">
+          <h4>⏱️ Timebound</h4>
+          <p>10-minute max wait for scan completion. Budget-aware.</p>
+        </div>
+        <div class="card">
+          <h4>💬 Smart Comments</h4>
+          <p>Idempotent PR comments update on rerun, never duplicate.</p>
+        </div>
+        <div class="card">
+          <h4>📈 Full Reports</h4>
+          <p>Markdown reports include coverage, bugs, pass rates, healing actions.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Setup (5 Steps)</h2>
+      <ol style="margin-left: 20px;">
+        <li><strong>Deploy Odyssey</strong> to a public URL (Vercel, AWS, etc.)</li>
+        <li><strong>Set env var</strong> on deployed app: <code>ODYSSEY_CI_TOKEN=odyssey_sk_&lt;random&gt;</code></li>
+        <li><strong>Add GitHub Secrets</strong>: <code>ODYSSEY_URL</code> and <code>ODYSSEY_CI_TOKEN</code></li>
+        <li><strong>Wire preview URL</strong> in workflow's "Get preview URL" step</li>
+        <li><strong>Create PR</strong> — workflow auto-runs and comments with results</li>
+      </ol>
+      <p style="margin-top: 20px;">For detailed setup with troubleshooting, see <code>.github/ODYSSEY_CI_SETUP.md</code></p>
+    </div>
+
+    <div class="section">
+      <h2>API Endpoints</h2>
+      <p>The workflow uses three endpoints, all protected by bearer token when <code>ODYSSEY_CI_TOKEN</code> is set:</p>
+
+      <h3>POST /api/runs — Create scan</h3>
+      <div style="background: rgba(0, 0, 0, 0.3); padding: 15px; border-radius: 4px; margin: 10px 0; overflow-x: auto;">
+        <code>curl -X POST \<br/>
+&nbsp;&nbsp;-H "Authorization: Bearer $TOKEN" \<br/>
+&nbsp;&nbsp;-H "Content-Type: application/json" \<br/>
+&nbsp;&nbsp;-d '{"url": "https://pr-preview.example.com"}' \<br/>
+&nbsp;&nbsp;$ODYSSEY_URL/api/runs</code>
+      </div>
+      <p>Response: <code>{ id: "run_abc123" }</code></p>
+
+      <h3>GET /api/runs/[id] — Poll status</h3>
+      <div style="background: rgba(0, 0, 0, 0.3); padding: 15px; border-radius: 4px; margin: 10px 0; overflow-x: auto;">
+        <code>curl -H "Authorization: Bearer $TOKEN" \<br/>
+&nbsp;&nbsp;$ODYSSEY_URL/api/runs/run_abc123</code>
+      </div>
+      <p>Response: <code>{ state: { report: {...} }, live: false }</code> when done</p>
+
+      <h3>GET /api/runs/[id]/report.md — Export report</h3>
+      <div style="background: rgba(0, 0, 0, 0.3); padding: 15px; border-radius: 4px; margin: 10px 0; overflow-x: auto;">
+        <code>curl -H "Authorization: Bearer $TOKEN" \<br/>
+&nbsp;&nbsp;$ODYSSEY_URL/api/runs/run_abc123/report.md</code>
+      </div>
+      <p>Response: Full Markdown report with coverage, bugs, risks, PRD traceability</p>
+    </div>
+
+    <div class="section">
+      <h2>Example PR Comment</h2>
+      <div style="background: rgba(96, 165, 250, 0.1); border-left: 4px solid #60a5fa; padding: 20px; border-radius: 4px; margin: 15px 0;">
+        <h4 style="color: #60a5fa;">🧪 Odyssey Test Scan</h4>
+        <table>
+          <tr>
+            <th>Metric</th>
+            <th>Value</th>
+          </tr>
+          <tr>
+            <td>Coverage</td>
+            <td style="color: #4ade80;">88/100</td>
+          </tr>
+          <tr>
+            <td>Bugs Found</td>
+            <td style="color: #facc15;">2</td>
+          </tr>
+          <tr>
+            <td>Passed</td>
+            <td style="color: #4ade80;">13</td>
+          </tr>
+          <tr>
+            <td>Failed</td>
+            <td style="color: #f87171;">1</td>
+          </tr>
+          <tr>
+            <td>Healed</td>
+            <td style="color: #f87171;">1</td>
+          </tr>
+        </table>
+        <p style="margin-top: 15px;">📊 <a href="#" style="color: #60a5fa;">View Full Report</a></p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Authentication Design</h2>
+      <p><strong>Backward Compatible:</strong></p>
+      <ul>
+        <li><strong>If ODYSSEY_CI_TOKEN is NOT set:</strong> Auth disabled (current behavior — local dev works)</li>
+        <li><strong>If ODYSSEY_CI_TOKEN is set:</strong> All callers must send <code>Authorization: Bearer &lt;token&gt;</code></li>
+      </ul>
+      <p style="margin-top: 20px;"><strong>Why:</strong> Local development unaffected, production/staging protected, simple bearer-token design with no middleware overhead.</p>
+    </div>
+
+    <div class="section">
+      <h2>Testing the Integration</h2>
+      <ol style="margin-left: 20px;">
+        <li>Create a PR against the repo</li>
+        <li>Watch Actions tab for "Odyssey Scan" workflow</li>
+        <li>Wait for completion (~1-2 minutes)</li>
+        <li>Check PR comments for Odyssey report with coverage, bugs, pass rate</li>
+        <li>Push another commit to same PR</li>
+        <li>Verify comment <span class="success">updates</span> (not duplicated)</li>
+      </ol>
+    </div>
+
+    <div class="section">
+      <h2>Files Involved</h2>
+      <table>
+        <tr>
+          <th>File</th>
+          <th>Purpose</th>
+        </tr>
+        <tr>
+          <td><code>.github/workflows/odyssey-scan.yml</code></td>
+          <td>Main workflow: trigger, poll, comment</td>
+        </tr>
+        <tr>
+          <td><code>src/app/api/auth/require-ci-token.ts</code></td>
+          <td>Bearer-token validation helper</td>
+        </tr>
+        <tr>
+          <td><code>src/app/api/runs/[id]/report.md/route.ts</code></td>
+          <td>Export report as Markdown</td>
+        </tr>
+        <tr>
+          <td><code>.github/ODYSSEY_CI_SETUP.md</code></td>
+          <td>Complete setup guide + troubleshooting</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>Next Steps</h2>
+      <div class="grid-2">
+        <div style="text-align: center;">
+          <h3 style="margin-top: 0;">📋 Setup</h3>
+          <p>Follow the 5-step setup in `.github/ODYSSEY_CI_SETUP.md`</p>
+        </div>
+        <div style="text-align: center;">
+          <h3 style="margin-top: 0;">🧪 Test</h3>
+          <p>Create a PR and watch the workflow run automatically</p>
+        </div>
+      </div>
+      <div style="text-align: center; margin-top: 30px;">
+        <a href="/ODYSSEY_PROJECT.md" class="cta">Full Documentation</a>
+        <a href="/.github/ODYSSEY_CI_SETUP.md" class="cta" style="margin-left: 10px;">Setup Guide</a>
+      </div>
+    </div>
+
+    <div style="text-align: center; color: #606060; margin-top: 60px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+      <p>GitHub Actions CI Integration for The Odyssey Test Orchestrator</p>
+    </div>
+  </div>
+</body>
+</html>
