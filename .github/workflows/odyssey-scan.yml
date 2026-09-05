@@ -1,0 +1,192 @@
+name: Odyssey Scan
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'URL to scan (e.g., http://localhost:3000 or https://example.com)'
+        required: true
+        default: 'http://localhost:3000'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get target URL
+        id: preview
+        run: |
+          # If manually triggered, use the input URL
+          # If PR trigger, use a default or placeholder
+          if [ -z "${{ github.event.inputs.target_url }}" ]; then
+            TARGET_URL="http://localhost:3000"
+          else
+            TARGET_URL="${{ github.event.inputs.target_url }}"
+          fi
+          echo "preview_url=$TARGET_URL" >> $GITHUB_OUTPUT
+          echo "Target URL: $TARGET_URL"
+
+      - name: Start Odyssey scan
+        id: start-scan
+        run: |
+          RESPONSE=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"url\": \"${{ steps.preview.outputs.preview_url }}\"}" \
+            "http://localhost:3000/api/runs")
+
+          RUN_ID=$(echo "$RESPONSE" | jq -r '.id // empty')
+
+          if [ -z "$RUN_ID" ]; then
+            echo "Failed to start scan. Response: $RESPONSE"
+            exit 1
+          fi
+
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "Started scan with run ID: $RUN_ID"
+
+      - name: Wait for scan to complete
+        run: |
+          RUN_ID=${{ steps.start-scan.outputs.run_id }}
+          MAX_WAIT=600
+          ELAPSED=0
+          CHECK_INTERVAL=10
+
+          echo "Waiting for scan $RUN_ID to complete (max ${MAX_WAIT}s)..."
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            RESPONSE=$(curl -s \
+              "http://localhost:3000/api/runs/$RUN_ID")
+
+            LIVE=$(echo "$RESPONSE" | jq -r '.live // empty')
+            REPORT=$(echo "$RESPONSE" | jq '.state.report // empty')
+
+            if [ "$LIVE" = "false" ] && [ ! -z "$REPORT" ]; then
+              echo "✅ Scan complete!"
+              exit 0
+            fi
+
+            echo "Still running... (${ELAPSED}s elapsed)"
+            sleep $CHECK_INTERVAL
+            ELAPSED=$((ELAPSED + CHECK_INTERVAL))
+          done
+
+          echo "❌ Scan timeout after ${MAX_WAIT} seconds"
+          exit 1
+
+      - name: Download report markdown
+        run: |
+          curl -s \
+            "http://localhost:3000/api/runs/${{ steps.start-scan.outputs.run_id }}/report.md" \
+            -o report.md
+
+          # Verify file exists and has content
+          if [ ! -s report.md ]; then
+            echo "Failed to download report"
+            exit 1
+          fi
+
+          echo "✅ Report downloaded"
+
+      - name: Fetch run summary data
+        id: summary
+        run: |
+          RESPONSE=$(curl -s \
+            "http://localhost:3000/api/runs/${{ steps.start-scan.outputs.run_id }}")
+
+          BUGS=$(echo "$RESPONSE" | jq '.state.report.bugs | length // 0')
+          COVERAGE=$(echo "$RESPONSE" | jq '.state.report.coverageScore // 0')
+          PASSED=$(echo "$RESPONSE" | jq '.state.report.passed // 0')
+          FAILED=$(echo "$RESPONSE" | jq '.state.report.failed // 0')
+          HEALED=$(echo "$RESPONSE" | jq '.state.report.healed // 0')
+
+          echo "bugs=$BUGS" >> $GITHUB_OUTPUT
+          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+          echo "passed=$PASSED" >> $GITHUB_OUTPUT
+          echo "failed=$FAILED" >> $GITHUB_OUTPUT
+          echo "healed=$HEALED" >> $GITHUB_OUTPUT
+
+          echo "📊 Summary: Coverage=$COVERAGE, Bugs=$BUGS, Passed=$PASSED, Failed=$FAILED, Healed=$HEALED"
+
+      - name: Write to job summary
+        run: |
+          REPORT_URL="http://localhost:3000/runs/${{ steps.start-scan.outputs.run_id }}/report"
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ## 🧪 Odyssey Test Scan Results
+
+          | Metric | Value |
+          |--------|-------|
+          | Coverage | ${{ steps.summary.outputs.coverage }}/100 |
+          | Bugs Found | ${{ steps.summary.outputs.bugs }} |
+          | Passed | ${{ steps.summary.outputs.passed }} |
+          | Failed | ${{ steps.summary.outputs.failed }} |
+          | Healed | ${{ steps.summary.outputs.healed }} |
+          | Run ID | ${{ steps.start-scan.outputs.run_id }} |
+          | Target URL | ${{ steps.preview.outputs.preview_url }} |
+
+          ### 📊 Report Links
+          - **Local View**: http://localhost:3000/runs/${{ steps.start-scan.outputs.run_id }}/report
+          - **Copy Run ID**: `${{ steps.start-scan.outputs.run_id }}`
+
+          ### 📋 How to view the report:
+          1. Copy the Run ID above: `${{ steps.start-scan.outputs.run_id }}`
+          2. Open your local Odyssey app: http://localhost:3000
+          3. Navigate to: `/runs/${{ steps.start-scan.outputs.run_id }}/report`
+          EOF
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const bugs = ${{ steps.summary.outputs.bugs }};
+            const coverage = ${{ steps.summary.outputs.coverage }};
+            const passed = ${{ steps.summary.outputs.passed }};
+            const failed = ${{ steps.summary.outputs.failed }};
+            const healed = ${{ steps.summary.outputs.healed }};
+            const runId = '${{ steps.start-scan.outputs.run_id }}';
+            const targetUrl = '${{ steps.preview.outputs.preview_url }}';
+
+            const marker = '<!-- odyssey-scan-report -->';
+            const body = `${marker}
+            ## 🧪 Odyssey Test Scan
+
+            **Scanned**: ${targetUrl}
+
+            | Metric | Value |
+            |--------|-------|
+            | Coverage | ${coverage}/100 |
+            | Bugs Found | ${bugs} |
+            | Passed | ${passed} |
+            | Failed | ${failed} |
+            | Healed | ${healed} |
+            | Run ID | \`${runId}\` |
+
+            📊 **View Report**: http://localhost:3000/runs/${runId}/report`;
+
+            // Find existing comment to update it (idempotent)
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.data.find(c => c.body.includes(marker));
+
+            if (existing) {
+              console.log(`Updating existing comment ${existing.id}`);
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: body,
+              });
+            } else {
+              console.log('Creating new comment');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body,
+              });
+            }
