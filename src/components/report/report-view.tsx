@@ -83,9 +83,21 @@ export function ReportView({
           >
             ← Back to the run
           </Link>
-          <div className="ml-auto flex items-center gap-2 font-mono text-xs text-base-500">
+          <div className="ml-auto flex items-center gap-3 font-mono text-xs text-base-500">
             <span>{hostOf(report.url)}</span>
             <Badge mono>{runId}</Badge>
+            <Link
+              href={`/runs/${runId}/rerun`}
+              className="rounded-md bg-ember-500/20 px-2.5 py-1 text-ember-400 transition hover:bg-ember-500/30"
+            >
+              ⟳ Rerun
+            </Link>
+            <Link
+              href={`/runs/compare?old=run_example&new=${runId}`}
+              className="rounded-md bg-info-500/20 px-2.5 py-1 text-info-400 transition hover:bg-info-500/30"
+            >
+              Compare
+            </Link>
           </div>
         </div>
       </header>

@@ -1,18 +1,10 @@
 import Link from "next/link";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { Badge, Dot, Meter, Row, SampleNotice, Section, SectionHeader, SplitGrid, Stat } from "@/components/ui/primitives";
-import {
-  COVERAGE,
-  DEFECTS,
-  RUN_HISTORY,
-  RUNS_LAST_24H,
-  SCHEDULES,
-  formatCountdown,
-  targetName,
-} from "@/lib/mock-fleet";
+import { Badge, Dot, Row, Section, SectionHeader, SplitGrid, Stat } from "@/components/ui/primitives";
 import { formatDuration, formatRelative, hostOf } from "@/lib/format";
 import type { RunStatus } from "@/lib/types";
 import type { Tone } from "@/components/ui/primitives";
+import { listRuns, getRunState } from "@/server/run-store";
 
 const STATUS_TONE: Record<RunStatus, Tone> = {
   queued: "neutral",
@@ -22,24 +14,34 @@ const STATUS_TONE: Record<RunStatus, Tone> = {
   cancelled: "neutral",
 };
 
-export default function OverviewPage() {
-  const avgCoverage = Math.round(
-    RUN_HISTORY.reduce((n, r) => n + r.coverageScore, 0) / RUN_HISTORY.length,
+export default async function OverviewPage() {
+  const runs = await listRuns();
+  const runStates = await Promise.all(
+    runs.map(async (r) => ({ ...r, state: await getRunState(r.id) })),
   );
-  const healed = RUN_HISTORY.reduce((n, r) => n + r.healed, 0);
-  const openDefects = DEFECTS.filter((d) => d.status !== "fixed");
-  const next = [...SCHEDULES]
-    .filter((s) => s.enabled)
-    .sort((a, b) => a.nextRunAt.localeCompare(b.nextRunAt));
-  const riskiest = [...COVERAGE]
+
+  const avgCoverage =
+    runs.length > 0
+      ? Math.round(
+          runs.reduce((n, r) => n + r.coverageScore, 0) / runs.length,
+        )
+      : 0;
+  const healed = runs.reduce((n, r) => n + r.healed, 0);
+  const allBugs = runStates.flatMap((r) =>
+    (r.state?.report?.bugs ?? []).map((b) => ({ ...b, runId: r.id }))
+  );
+  const allRisks = runStates.flatMap((r) =>
+    (r.state?.report?.risks ?? []).map((ri) => ({ ...ri, runId: r.id }))
+  );
+  const riskiest = allRisks
     .filter((c) => c.risk === "critical" || c.risk === "high")
-    .sort((a, b) => a.scenarios - b.scenarios);
+    .slice(0, 10);
 
   return (
     <>
       <PageHeader
         title="Overview"
-        subtitle="What the orchestrator has been doing while you weren't watching."
+        subtitle="Live test orchestration dashbaord"
         actions={
           <Link
             href="/new"
@@ -51,31 +53,28 @@ export default function OverviewPage() {
       />
 
       <PageBody>
-        <SampleNotice>
-          The overview aggregates a fleet of targets and runs; this build drives one run at a time, so the figures below are seeded. Every number inside a run you open is measured by that run.
-        </SampleNotice>
         {/* ---- headline numbers ---- */}
         <Section>
           <SplitGrid cols={4}>
-          <Stat label="Runs · 24h" value={RUNS_LAST_24H.length} hint={`${RUN_HISTORY.length} total on record`} />
-          <Stat
-            label="Avg coverage"
-            value={avgCoverage}
-            tone={avgCoverage >= 85 ? "ok" : "warn"}
-            hint="Critic score across all targets"
-          />
-          <Stat
-            label="Tests healed"
-            value={healed}
-            tone="ember"
-            hint="Locators repaired without weakening assertions"
-          />
-          <Stat
-            label="Open defects"
-            value={openDefects.length}
-            tone={openDefects.length ? "danger" : "ok"}
-            hint="Classified as app bugs, not script drift"
-          />
+            <Stat label="Completed runs" value={runs.length} hint="Test suites finished" />
+            <Stat
+              label="Avg coverage"
+              value={avgCoverage}
+              tone={avgCoverage >= 85 ? "ok" : "warn"}
+              hint="Critic score across runs"
+            />
+            <Stat
+              label="Tests healed"
+              value={healed}
+              tone="ember"
+              hint="Locators repaired without weakening assertions"
+            />
+            <Stat
+              label="Open defects"
+              value={allBugs.length}
+              tone={allBugs.length ? "danger" : "ok"}
+              hint="Genuine app bugs filed"
+            />
           </SplitGrid>
         </Section>
 
@@ -84,7 +83,7 @@ export default function OverviewPage() {
           <div className="lg:col-span-2">
             <SectionHeader
               title="Recent runs"
-              subtitle="Newest first, manual and scheduled together"
+              subtitle="Newest first"
               right={
                 <Link href="/runs" className="text-xs text-ember-400 hover:text-ember-300">
                   All runs →
@@ -92,7 +91,7 @@ export default function OverviewPage() {
               }
             />
             <div className="divide-y divide-base-850">
-              {RUN_HISTORY.slice(0, 5).map((r) => (
+              {runs.slice(0, 5).map((r) => (
                 <Link
                   key={r.id}
                   href={`/runs/${r.id}`}
@@ -101,13 +100,9 @@ export default function OverviewPage() {
                   <Dot tone={STATUS_TONE[r.status]} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px] text-base-200">
-                      {targetName(r.targetId)}
-                      <span className="ml-2 font-mono text-xs text-base-600">
-                        {hostOf(r.url)}
-                      </span>
+                      {hostOf(r.url)}
                     </div>
                     <div className="mt-0.5 truncate text-xs text-base-600">
-                      {r.trigger === "schedule" ? "Scheduled" : "Manual"} ·{" "}
                       {formatRelative(r.startedAt)} · {formatDuration(r.durationMs)}
                     </div>
                   </div>
@@ -127,34 +122,33 @@ export default function OverviewPage() {
             </div>
           </div>
 
-          {/* ---- next scheduled ---- */}
+          {/* ---- stats ---- */}
           <div className="border-t border-base-850 lg:border-t-0">
             <SectionHeader
-              title="Up next"
-              subtitle="Enabled schedules"
-              right={
-                <Link
-                  href="/schedule"
-                  className="text-xs text-ember-400 hover:text-ember-300"
-                >
-                  Schedule →
-                </Link>
-              }
+              title="Fleet stats"
+              subtitle="Aggregated"
             />
-            <div className="divide-y divide-base-850">
-              {next.map((s) => (
-                <Row key={s.id}>
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="truncate text-[13px] text-base-200">{s.name}</span>
-                    <span className="shrink-0 font-mono text-xs text-ember-400">
-                      {formatCountdown(s.nextRunAt)}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-xs text-base-600">
-                    {targetName(s.targetId)} · {s.cadence}
-                  </div>
-                </Row>
-              ))}
+            <div className="space-y-4 px-6 py-4">
+              <div>
+                <div className="text-xs text-base-600">Total cost</div>
+                <div className="text-lg font-semibold text-base-100">
+                  ${runs.reduce((n, r) => n + r.costUsd, 0).toFixed(2)}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-base-600">Avg duration</div>
+                <div className="text-lg font-semibold text-base-100">
+                  {runs.length > 0
+                    ? formatDuration(Math.round(runs.reduce((n, r) => n + r.durationMs, 0) / runs.length))
+                    : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-base-600">Total replans</div>
+                <div className="text-lg font-semibold text-base-100">
+                  {runs.reduce((n, r) => n + r.replans, 0)}
+                </div>
+              </div>
             </div>
           </div>
         </Section>
@@ -164,7 +158,7 @@ export default function OverviewPage() {
           <div>
             <SectionHeader
               title="Open defects"
-              subtitle="Failures the classifier attributed to the application"
+              subtitle="Genuine app bugs"
               right={
                 <Link
                   href="/defects"
@@ -175,8 +169,8 @@ export default function OverviewPage() {
               }
             />
             <div className="divide-y divide-base-850">
-              {openDefects.slice(0, 4).map((d) => (
-                <Row key={d.id}>
+              {allBugs.slice(0, 4).map((d) => (
+                <Row key={`${d.runId}-${d.id}`}>
                   <div className="flex items-start gap-2">
                     <Badge tone={d.severity === "critical" ? "danger" : "warn"}>
                       {d.severity}
@@ -184,12 +178,6 @@ export default function OverviewPage() {
                     <span className="min-w-0 flex-1 text-[13px] leading-snug text-base-200">
                       {d.title}
                     </span>
-                    <span className="shrink-0 font-mono text-xs text-base-500">
-                      {Math.round(d.confidence * 100)}%
-                    </span>
-                  </div>
-                  <div className="mt-1.5 font-mono text-xs text-base-600">
-                    {targetName(d.targetId)} · {d.surface}
                   </div>
                 </Row>
               ))}
@@ -199,8 +187,8 @@ export default function OverviewPage() {
           {/* ---- riskiest untested ---- */}
           <div className="border-t border-base-850 lg:border-t-0">
             <SectionHeader
-              title="Riskiest thin coverage"
-              subtitle="Surfaces the plan barely touched — ranked by blast radius"
+              title="High-risk surfaces"
+              subtitle="Barely tested areas"
               right={
                 <Link
                   href="/coverage"
@@ -211,21 +199,17 @@ export default function OverviewPage() {
               }
             />
             <div className="divide-y divide-base-850">
-              {riskiest.map((c) => (
-                <Row key={c.id}>
+              {riskiest.slice(0, 4).map((c) => (
+                <Row key={`${c.runId}-${c.id}`}>
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-[13px] text-base-200">{c.surface}</span>
                     <Badge tone={c.risk === "critical" ? "danger" : "warn"}>
-                      {c.scenarios} scenario{c.scenarios === 1 ? "" : "s"}
+                      {c.risk}
                     </Badge>
                   </div>
-                  <p className="mt-1 text-xs leading-relaxed text-base-600">{c.note}</p>
-                  <Meter
-                    className="mt-2.5 max-w-md"
-                    value={Math.min(100, c.scenarios * 12)}
-                    tone={c.risk === "critical" ? "danger" : "warn"}
-                    label={`${c.surface} coverage`}
-                  />
+                  <p className="mt-1 text-xs leading-relaxed text-base-600">
+                    {c.reasons.join(" · ")}
+                  </p>
                 </Row>
               ))}
             </div>
