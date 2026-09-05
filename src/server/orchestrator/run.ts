@@ -93,8 +93,8 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
     workspace: runDir(runId),
     signal,
     think: (agent, text) => emit({ type: "agent.thinking", agent, text }),
-    tool: (agent, tool, summary, ok = true) =>
-      emit({ type: "agent.tool", agent, tool, summary, ok }),
+    tool: (agent, tool, summary, ok = true, detail) =>
+      emit({ type: "agent.tool", agent, tool, summary, ok, detail }),
     artifact: (kind, path, title, testId) =>
       emit({ type: "artifact", kind, path, title, testId }),
     overBudget: () => budgetExceeded,

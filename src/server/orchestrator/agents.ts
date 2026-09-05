@@ -34,8 +34,18 @@ export interface AgentContext {
   signal: AbortSignal;
   /** Narration — what the agent is about to do and why. */
   think(agent: AgentName, text: string): void;
-  /** A tool call the agent made, with its outcome. */
-  tool(agent: AgentName, tool: string, summary: string, ok?: boolean): void;
+  /**
+   * A tool call the agent made, with its outcome. `detail` is the unsqueezed version of
+   * the same call — the arguments in full, or a failure's own reply — for the console row
+   * a reader opens; see the event in `types.ts`.
+   */
+  tool(
+    agent: AgentName,
+    tool: string,
+    summary: string,
+    ok?: boolean,
+    detail?: string,
+  ): void;
   /** A file the agent produced. `testId` ties it to one generated test, when it is one. */
   artifact(
     kind: "plan" | "test" | "trace" | "screenshot" | "video" | "patch",

@@ -112,7 +112,7 @@ export async function runStructured<S extends z.ZodType>(
       // the surviving half reaches the event log.
       const args = clean(raw.arguments ?? "");
       if (raw.callId) pending.set(raw.callId, { name: raw.name, args });
-      ctx.tool(spec.as, raw.name, summariseArgs(args));
+      ctx.tool(spec.as, raw.name, summariseArgs(args), true, detailOf(args));
       continue;
     }
 
@@ -126,7 +126,19 @@ export async function runStructured<S extends z.ZodType>(
       // failure. Treating those as successes made the activity feed claim the agent found
       // things it did not, which is precisely the lie this stage exists to prevent.
       const ok = raw.status !== "incomplete" && !/(^|\n)### Error\b/.test(output);
-      if (!ok) ctx.tool(spec.as, call.name, elide(output, 200, 260), false);
+      // A failure carries its own reply as the detail, under the arguments that produced
+      // it. The feed line is elided in the middle to fit a row, and the middle of a
+      // Playwright error is where the call log that explains it lives.
+      if (!ok) {
+        const args = detailOf(call.args);
+        ctx.tool(
+          spec.as,
+          call.name,
+          elide(output, 200, 260),
+          false,
+          `${args ? `${args}\n\n` : ""}${cap(output)}`,
+        );
+      }
       spec.onTool?.({ name: call.name, args: call.args, output, ok });
       continue;
     }
@@ -165,6 +177,28 @@ function summariseArgs(args: string): string {
     return parts.length ? parts.join(", ") : "—";
   } catch {
     return truncate(args, 160);
+  }
+}
+
+/**
+ * How much of a call is worth keeping for the console row a reader opens.
+ *
+ * A `browser_snapshot` reply is tens of kilobytes of accessibility tree, and this text is
+ * appended to the event log *and* pushed down every open SSE connection. Four kilobytes
+ * holds a full set of arguments and the head of any error worth reading.
+ */
+const DETAIL_LIMIT = 4000;
+
+const cap = (s: string) =>
+  s.length <= DETAIL_LIMIT ? s : `${s.slice(0, DETAIL_LIMIT)}\n…truncated`;
+
+/** The same arguments as `summariseArgs`, pretty-printed and left whole. */
+function detailOf(args: string): string | undefined {
+  if (!args) return undefined;
+  try {
+    return cap(JSON.stringify(JSON.parse(args), null, 2));
+  } catch {
+    return cap(args);
   }
 }
 
