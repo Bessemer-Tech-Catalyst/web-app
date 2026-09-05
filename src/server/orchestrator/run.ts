@@ -300,69 +300,69 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
       return { value, outcome: value.tests.length ? ("ok" as const) : ("replan" as const) };
     });
 
-      // The gate. Its rules are in `./regenerate.ts` so they can be checked without a
-      // browser, a model or a key — see `regenerate.test.mts`.
-      const verdict = afterGeneration({
-        emitted: generated.tests.length,
-        quarantined: generated.quarantined,
-        attempt,
-        maxReplans: input.options.maxReplans,
-        overBudget: budgetExceeded,
-      });
+    // The gate. Its rules are in `./regenerate.ts` so they can be checked without a
+    // browser, a model or a key — see `regenerate.test.mts`.
+    const verdict = afterGeneration({
+      emitted: generated.tests.length,
+      quarantined: generated.quarantined,
+      attempt,
+      maxReplans: input.options.maxReplans,
+      overBudget: budgetExceeded,
+    });
 
-      if (verdict.action === "proceed") break generation;
+    if (verdict.action === "proceed") break generation;
 
-      if (verdict.action === "escalate") {
-        decide(
-          "generate",
-          "Escalate — the plan cannot be built and there is no allowance left to re-plan it",
-          `All ${generated.quarantined.length} scenario(s) were quarantined, so there is no suite to run. ` +
-            (verdict.because === "over-budget"
-              ? "The run is over its budget ceiling, so buying another plan is not available. "
-              : `The re-plan allowance of ${input.options.maxReplans} is spent. `) +
-            "The report that follows is real but carries no execution evidence, and it says so rather " +
-            "than reading as a clean run.",
-          [
-            { kind: "selector-provenance", summary: `${generated.quarantined.length} scenario(s) quarantined, 0 emitted` },
-            { kind: "heuristic", summary: `plan attempt ${attempt} of ${input.options.maxReplans + 1}` },
-          ],
-        );
-        break generation;
-      }
-
+    if (verdict.action === "escalate") {
       decide(
         "generate",
-        "Re-plan — the plan passed critique but could not be built against the live application",
-        `Every one of the ${generated.quarantined.length} scenario(s) was quarantined, so this plan produced no ` +
-          "evidence at all. That is a failure of the plan rather than of the Generator: the scenarios asked for " +
-          "states the application does not expose. Re-planning against the specific reasons costs one of this " +
-          "run's re-plan allowance and is the only move that can still produce a suite; proceeding would spend " +
-          "every remaining stage on an empty suite.",
+        "Escalate — the plan cannot be built and there is no allowance left to re-plan it",
+        `All ${generated.quarantined.length} scenario(s) were quarantined, so there is no suite to run. ` +
+          (verdict.because === "over-budget"
+            ? "The run is over its budget ceiling, so buying another plan is not available. "
+            : `The re-plan allowance of ${input.options.maxReplans} is spent. `) +
+          "The report that follows is real but carries no execution evidence, and it says so rather " +
+          "than reading as a clean run.",
         [
-          { kind: "selector-provenance", summary: `0 of ${generated.quarantined.length} scenarios emitted a test` },
-          ...generated.quarantined.slice(0, 2).map((q) => ({
-            kind: "selector-provenance" as const,
-            summary: `${q.title} — ${q.reason}`,
-          })),
+          { kind: "selector-provenance", summary: `${generated.quarantined.length} scenario(s) quarantined, 0 emitted` },
+          { kind: "heuristic", summary: `plan attempt ${attempt} of ${input.options.maxReplans + 1}` },
         ],
       );
+      break generation;
+    }
 
-      // Handed back through the channel the Planner already revises against. These are
-      // unbuildability directives rather than coverage gaps, and they say so themselves.
-      critique = {
-        attempt,
-        score: critique?.score ?? 0,
-        dimensions: critique?.dimensions ?? EMPTY_DIMENSIONS,
-        verdict: "replan",
-        rationale:
-          "The plan scored well and still produced nothing. Every scenario below was quarantined by the " +
-          "Generator after it walked the live application, so each one has to be re-scoped to a state the " +
-          "application actually exposes — or dropped in favour of one that is reachable.",
-        gaps: verdict.directives,
-      };
-      critiques.push(critique);
-      attempt++;
-      generationAttempt++;
+    decide(
+      "generate",
+      "Re-plan — the plan passed critique but could not be built against the live application",
+      `Every one of the ${generated.quarantined.length} scenario(s) was quarantined, so this plan produced no ` +
+        "evidence at all. That is a failure of the plan rather than of the Generator: the scenarios asked for " +
+        "states the application does not expose. Re-planning against the specific reasons costs one of this " +
+        "run's re-plan allowance and is the only move that can still produce a suite; proceeding would spend " +
+        "every remaining stage on an empty suite.",
+      [
+        { kind: "selector-provenance", summary: `0 of ${generated.quarantined.length} scenarios emitted a test` },
+        ...generated.quarantined.slice(0, 2).map((q) => ({
+          kind: "selector-provenance" as const,
+          summary: `${q.title} — ${q.reason}`,
+        })),
+      ],
+    );
+
+    // Handed back through the channel the Planner already revises against. These are
+    // unbuildability directives rather than coverage gaps, and they say so themselves.
+    critique = {
+      attempt,
+      score: critique?.score ?? 0,
+      dimensions: critique?.dimensions ?? EMPTY_DIMENSIONS,
+      verdict: "replan",
+      rationale:
+        "The plan scored well and still produced nothing. Every scenario below was quarantined by the " +
+        "Generator after it walked the live application, so each one has to be re-scoped to a state the " +
+        "application actually exposes — or dropped in favour of one that is reachable.",
+      gaps: verdict.directives,
+    };
+    critiques.push(critique);
+    attempt++;
+    generationAttempt++;
   }
 
   const replans = attempt - 1;

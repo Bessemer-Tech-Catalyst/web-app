@@ -42,6 +42,11 @@ export async function scaffoldWorkspace(runId: string, input: RunInput) {
   await writePlaywrightConfig(runId, input);
 }
 
+// `types: ["node"]` because a signed-out test reads `process.env.ODYSSEY_PASSWORD` —
+// the runner supplies the credential rather than the file carrying it (see
+// `agents/credentials.ts`). Playwright transpiles without typechecking, so this changes
+// nothing about whether the suite runs; it is here so the suite a team copies into their
+// own repo typechecks there.
 const TSCONFIG = `${JSON.stringify(
   {
     compilerOptions: {
@@ -49,6 +54,7 @@ const TSCONFIG = `${JSON.stringify(
       module: "CommonJS",
       moduleResolution: "node",
       lib: ["ES2022", "DOM"],
+      types: ["node"],
       strict: true,
       esModuleInterop: true,
       skipLibCheck: true,
