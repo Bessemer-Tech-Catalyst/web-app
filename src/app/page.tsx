@@ -200,7 +200,7 @@ export default async function OverviewPage() {
             />
             <div className="divide-y divide-base-850">
               {riskiest.slice(0, 4).map((c) => (
-                <Row key={c.id}>
+                <Row key={`${c.runId}-${c.id}`}>
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-[13px] text-base-200">{c.surface}</span>
                     <Badge tone={c.risk === "critical" ? "danger" : "warn"}>
