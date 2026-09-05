@@ -105,6 +105,25 @@ export const models = {
   get healer(): ModelTier {
     return tier("ODYSSEY_MODEL_HEALER", "medium");
   },
+  /**
+   * The risk ledger's review pass.
+   *
+   * `low` by default and that is not cost-cutting: the scores arrive already computed,
+   * so this stage is asked only whether the rules missed something. A tier that reasons
+   * harder here mostly reasons itself into adjustments it then cannot justify — and the
+   * gate throws those away, so the spend buys nothing.
+   */
+  get risk(): ModelTier {
+    return tier("ODYSSEY_MODEL_RISK", "low");
+  },
+  /**
+   * PRD extraction and mapping. Long input, and the failure mode is subtle — a plausible
+   * requirement the document does not contain, or a scenario mapped on shared vocabulary
+   * rather than on what it does. Worth medium.
+   */
+  get prd(): ModelTier {
+    return tier("ODYSSEY_MODEL_PRD", "medium");
+  },
 };
 
 /** Prices a stage's streamed usage so the orchestrator's budget guard can act on it. */
@@ -121,5 +140,7 @@ export function describeModels() {
     generator: models.generator,
     classifier: models.classifier,
     healer: models.healer,
+    risk: models.risk,
+    prd: models.prd,
   };
 }

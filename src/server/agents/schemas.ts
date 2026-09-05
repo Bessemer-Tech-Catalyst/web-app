@@ -1,5 +1,5 @@
 /**
- * Structured-output schemas for the three Phase 3 agents.
+ * Structured-output schemas for every agent that returns one.
  *
  * These mirror the domain types in `@/lib/types` rather than importing them, because a
  * structured-output schema has constraints a TypeScript interface does not: every field
@@ -225,6 +225,77 @@ export const healSchema = z.object({
 });
 
 export type HealOutput = z.infer<typeof healSchema>;
+
+// ---------------------------------------------------------------------------
+// Risk ledger
+// ---------------------------------------------------------------------------
+
+/**
+ * What the model is allowed to contribute to the risk ledger — which is deliberately
+ * not "the ledger".
+ *
+ * The scores arrive already computed (`risk-signals.ts`), so the schema only carries the
+ * two things a model can add that rules over a URL path cannot: a bounded correction
+ * with its justification, and a surface that has no URL at all. Both are gated in
+ * `risk.ts` — an unjustified adjustment is discarded and an uncited surface is dropped —
+ * and the shape here is what makes those gates checkable rather than a matter of tone.
+ */
+export const riskSchema = z.object({
+  headline: z
+    .string()
+    .describe("One sentence: the most important thing this run did not find out. Name the surface."),
+  adjustments: z.array(
+    z.object({
+      surface: z.string().describe("Exactly as it appears in the scored list"),
+      adjust: z
+        .number()
+        .describe("Points to add or subtract, at most 15 either way. 0 to leave it alone."),
+      justification: z
+        .string()
+        .describe("What the computed factors missed. An empty or vague one discards the adjustment."),
+      reasons: z.array(z.string()).describe("Extra lines for the report. Never restate a factor."),
+    }),
+  ),
+  added: z.array(
+    z.object({
+      surface: z.string().describe("A risk with no URL — a modal, an iframe, an email step"),
+      observation: z
+        .number()
+        .int()
+        .describe("Index into the Recon observation list this came from. Checked; a miss drops the row."),
+      score: z.number().min(0).max(100),
+      reasons: z.array(z.string()),
+    }),
+  ),
+});
+
+// ---------------------------------------------------------------------------
+// PRD traceability
+// ---------------------------------------------------------------------------
+
+/**
+ * The mapping, and only the mapping.
+ *
+ * Note what the model is *not* asked for: whether a requirement is covered. That is
+ * resolved after it, in `prd-gate.ts`, from the run's own results — because a scenario
+ * the Generator quarantined is a plan, not a test, and only the run knows which
+ * scenarios became evidence. Asking the model for a `covered` boolean here is how the
+ * naive version of this feature ticks a requirement nothing ever loaded.
+ */
+export const prdSchema = z.object({
+  requirements: z.array(
+    z.object({
+      id: z.string().describe("The document's own identifier where it has one, else R1, R2, …"),
+      text: z.string().describe("The requirement as a single testable statement"),
+      quote: z
+        .string()
+        .describe("VERBATIM from the document — a reader checks your extraction with this string"),
+      coveredBy: z
+        .array(z.string())
+        .describe("Scenario ids from the supplied plan that would prove it. Empty is a valid, valuable answer."),
+    }),
+  ),
+});
 
 export function toEvidence(items: z.infer<typeof evidenceSchema>[]): Evidence[] {
   return items.map((e) => ({

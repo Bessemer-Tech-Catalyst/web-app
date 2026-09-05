@@ -17,12 +17,14 @@
  * Agents are injected (see ./agents.ts). Phase 2 runs against deterministic stubs.
  */
 
+import { readFile } from "node:fs/promises";
 import { checkAssertionIntegrity } from "./assertion-guard";
 import { unifiedDiff } from "./patch";
 import { stubAgents } from "./stub-agents";
 import type { AgentContext, Agents, ReconResult } from "./agents";
 import { headed } from "../browser-mode";
-import { runDir } from "../paths";
+import { runDir, runPath } from "../paths";
+import { reportMarkdown } from "../report-markdown";
 import { writeArtifact } from "../workspace";
 import {
   type Critique,
@@ -34,6 +36,7 @@ import {
   type RunStatus,
   type Scenario,
   type Stage,
+  type SurfaceCoverage,
   type TestQualityReport,
   type TestResult,
   type TriageOutcome,
@@ -45,6 +48,24 @@ export interface OrchestratorOptions {
   emit: (event: OrchestratorEventInit) => void;
   signal: AbortSignal;
   agents?: Agents;
+}
+
+/**
+ * The coverage map the risk ledger computed, if it computed one.
+ *
+ * Absent whenever `assessRisk` is stubbed, which is a real configuration and not an
+ * error — so a missing file means the report omits the working, never that it fabricates
+ * a denominator for the coverage numbers printed above it.
+ */
+async function readCoverage(runId: string): Promise<SurfaceCoverage[] | undefined> {
+  try {
+    const parsed = JSON.parse(await readFile(runPath(runId, "coverage.json"), "utf8")) as {
+      surfaces?: SurfaceCoverage[];
+    };
+    return parsed.surfaces?.length ? parsed.surfaces : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunStatus> {
@@ -464,13 +485,10 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
   const report = await stage("report", 1, async () => {
     ctx.think("orchestrator", "Synthesising coverage, outcomes, healer actions, residual gaps and untested-flow risk.");
 
-    const risks = await agents.assessRisk(ctx, {
-      recon,
-      scenarios,
-      quarantined: generated.quarantined.map((q) => q.scenarioId),
-    });
-    const prd = await agents.tracePrd(ctx, { scenarios });
-
+    // Built before the ledger, because both the risk ledger and the PRD trace turn on
+    // exactly one question — did a test that ran stand behind this? — and that question
+    // is answered by this array. Passing it in is what stops either stage from having to
+    // read a `report.json` that does not exist yet.
     const finalResults: TestResult[] = [
       ...results.values(),
       ...generated.quarantined.map((q, i) => ({
@@ -483,6 +501,76 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
         error: q.reason,
       })),
     ];
+
+    const risks = await agents.assessRisk(ctx, {
+      recon,
+      scenarios,
+      quarantined: generated.quarantined.map((q) => ({ scenarioId: q.scenarioId, reason: q.reason })),
+      results: finalResults,
+      tests: generated.tests,
+    });
+    const prd = await agents.tracePrd(ctx, { scenarios, results: finalResults });
+
+    // The working behind the ledger, read back from the artifact the stage wrote. Read
+    // rather than returned because it is optional by design: a stubbed `assessRisk`
+    // writes no coverage map, and the report says nothing about surfaces instead of
+    // inventing a denominator for the numbers above it.
+    const surfaces = await readCoverage(runId);
+    const prdUntraced = prd
+      ? scenarios
+          .map((s) => s.id)
+          .filter((id) => !prd.some((r) => r.coveredBy.includes(id)))
+      : undefined;
+
+    // The risk ledger is a judgment about what the run chose not to find out, so it
+    // belongs in the Decision Log like every other one. Said only when there is
+    // something to say: on a run that covered everything, silence is the honest output.
+    const worst = risks[0];
+    if (worst) {
+      const noEvidence = risks.filter((r) => r.status === "planned-only");
+      decide(
+        "report",
+        `Publish ${risks.length} untested surface(s), led by ${worst.surface} at ${worst.score}/100`,
+        `The suite proves things about the surfaces it reached and nothing about the ones it did not, and ` +
+          "the second half of that sentence is the half a green report hides. Every surface Recon found is " +
+          "scored against fixed factors — credentials, money, destructive actions, reachability, whether the " +
+          `PRD names it — so the ranking is arithmetic a reader can check rather than a model's impression. ` +
+          (noEvidence.length
+            ? `${noEvidence.length} of these are surfaces the plan *does* cover: the scenario existed and no test ever ran, ` +
+              "which is intent without evidence and ranks above a surface nobody thought of."
+            : "Every one of these is a surface no scenario ever named."),
+        [
+          { kind: "heuristic", summary: `${worst.surface} — ${worst.risk}: ${worst.reasons[0] ?? "untested"}` },
+          {
+            kind: "heuristic",
+            summary: surfaces
+              ? `${surfaces.filter((s) => s.status === "exercised").length}/${surfaces.length} discovered surfaces exercised by a test that ran`
+              : `${risks.length} surfaces ranked`,
+          },
+        ],
+      );
+    }
+
+    if (prd) {
+      const withEvidence = prd.filter((r) => r.covered).length;
+      const plannedOnly = prd.filter((r) => r.status === "planned-only").length;
+      decide(
+        "report",
+        `Trace ${prd.length} stated requirement(s) to the suite — ${prd.length - withEvidence} have no test behind them`,
+        "Requirements are matched to scenarios by the model and then resolved against what the run actually " +
+          "did, which is where the matrix earns its place: a requirement whose scenario was quarantined is " +
+          "reported as having no evidence rather than as covered. " +
+          (plannedOnly
+            ? `${plannedOnly} requirement(s) land exactly there — the plan covers them and no test ran.`
+            : "Every mapped requirement had a test that reached the runner."),
+        [
+          { kind: "prd", summary: `${withEvidence}/${prd.length} requirements proven or exercised by a test that ran` },
+          ...(prdUntraced?.length
+            ? [{ kind: "prd" as const, summary: `${prdUntraced.length} scenario(s) trace to no stated requirement` }]
+            : []),
+        ],
+      );
+    }
 
     const passed = finalResults.filter((r) => r.status === "passed").length;
     const healedCount = finalResults.filter((r) => r.status === "healed").length;
@@ -513,6 +601,8 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
       remainingGaps: critique?.gaps ?? [],
       risks,
       prd,
+      surfaces,
+      prdUntraced,
     };
 
     // "Every executed test is green" is only true when something executed. With an empty
@@ -555,6 +645,12 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
 
     await writeArtifact(runId, "report.json", JSON.stringify(value, null, 2));
     ctx.artifact("plan", "report.json", "Test quality report");
+
+    // The same report as a document a person reviews, written beside the suite it
+    // describes. `report.json` is what the UI reads; this is what lands in a pull
+    // request, and the brief asks for something a team could actually adopt.
+    await writeArtifact(runId, "report.md", reportMarkdown(value));
+    ctx.artifact("plan", "report.md", "Test quality report (Markdown)");
     return { value };
   });
 

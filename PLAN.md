@@ -132,6 +132,17 @@ but didn't cover:
 
 That's the slide that makes a VC-backed company want to hire the team.
 
+**Built in Phase 6, and the shape of it matters as much as the idea.** Which surfaces have no
+evidence is *measured* — a test that visits `/orders` contains that string in a file we wrote, and
+we cross that with which tests actually ran. The score is a published weight table anyone can
+argue with, and the bands are calibrated so the sentence above comes out HIGH rather than being
+whatever the numbers happened to give. The model sees the arithmetic and may move a score by ±15;
+**if it can't name what the factors missed, the adjustment is thrown away.**
+
+And there is a third state nobody else will have: **`planned-only` — we planned to test this and
+no test ever ran.** That outranks a surface nobody thought of, because you had already decided it
+mattered and we still failed to get you evidence.
+
 ---
 
 ## What it looks like
@@ -204,8 +215,8 @@ so it's a swap, not a rewrite.
 | 3 | Recon + Planner + the Coverage Critic (real browser, real model) | ✅ **done and verified against a live app** |
 | 4 | Generator with live selector proving + parallel test execution | ✅ **done and verified by a green live run** |
 | 5 | Triage + Healer + the assertion guard | ✅ **done — a live run healed a drift and refused to heal a real bug** |
-| **6** | Final report, PRD gap analysis, risk ledger, screenshot/video viewer | ◀ **next** |
-| 7 | Demo rehearsal, README, architecture diagram, deck, video | |
+| 6 | Final report, PRD gap analysis, risk ledger, screenshot/video viewer | ✅ **built and unit-pinned — owes a live run** |
+| **7** | Demo rehearsal, README, architecture diagram, deck, video | ◀ **next** |
 
 Phase 3 was marked done once before it had ever run. It had not, and running it found four
 defects (below). "Done" now means *a real run produced it*, not *the code exists*.
@@ -230,6 +241,48 @@ So when phase 2 plugs in the real engine, **the UI doesn't change at all.** No r
 ---
 
 ## Where we are
+
+### Phase 6: the report the brief actually asked for
+
+Phase 6 closes the **last unclosed Must Have** in the brief — *"produce a final test quality
+report: scenarios covered, pass/fail outcomes, healer actions taken, coverage gaps remaining, and
+untested flow risk"* — and the **first of its two Bonus items**, PRD-to-test-plan gap analysis.
+Nothing on the `Agents` interface is a stand-in any more.
+
+Three ideas, and the first two are the ones that matter:
+
+- **Coverage is measured off the emitted suite, not off the plan.** A route counts as exercised
+  when a test that *ran* navigates to it — the path appears as a quoted string in a file we wrote.
+  Which gives a third state between covered and untested: **`planned-only` — the plan covers this
+  and no test ever ran.** Intent without evidence, and it ranks *above* a surface nobody thought
+  of, because the team has already decided it matters and the run has already failed to get
+  evidence about it.
+- **The risk score is arithmetic with a published weight table**, calibrated so §3.5's own worked
+  example lands where this document says it lands: credentials + reachable + named-in-PRD = 52 =
+  HIGH. A unit test pins that sentence. The model then sees the arithmetic and may adjust by ±15 —
+  and **an adjustment that cites nothing the factors missed is discarded, not damped**, because
+  unlike the triage classifier this stage has no browser and so has seen nothing new.
+- **A PRD requirement is only covered if a test that ran stands behind it.** Four states, not a
+  tick. The naive version of this feature ticks a requirement whose only scenario the Generator
+  quarantined, and tells a team their PRD is covered about a flow nothing ever loaded.
+
+> **On stage:** *"Your PRD says a signed-out user can reset their password. We planned for it. The
+> Generator couldn't prove a selector, so it quarantined it — and that means you have no evidence.
+> It's 78 out of 100 and it's the top row of the risk ledger, and here is the arithmetic."*
+
+**And it found two of our own defects before it ever ran a model.** The report's "Scenarios
+covered" table — the first thing the Must Have names — looked results up by an id only the fixtures
+ever produced, so **every live run rendered a fully executed suite as `pending` from top to
+bottom**. And the coverage map rebuilt spec filenames from scenario ids instead of reading the path
+the Generator recorded, which silently deleted the navigation signal for any nested file. Both fail
+the same way: not with an error, with a plausible-looking table. §14 of the implementation plan.
+
+**What Phase 6 owes: a live run.** The scoring layers run on every stubbed run and are pinned by
+41 new assertions. The model halves — the ±15 review, and requirement extraction with verbatim
+quotes — have never been driven by a real model against a real target. Four phases in a row,
+running the thing found defects that reading it had not.
+
+### Phases 1–5
 
 **Phases 1–5 are done and every one of them was run against a live application** — not a fixture,
 not a stub: a real authenticated SaaS app, a real public one, and our own shop, with a real key, in

@@ -28,5 +28,5 @@ export default async function ReportPage({
     );
   }
 
-  return <ReportView runId={id} report={state.report} />;
+  return <ReportView runId={id} report={state.report} artifacts={state.artifacts} />;
 }

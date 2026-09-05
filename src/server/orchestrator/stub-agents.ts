@@ -16,6 +16,8 @@
  * `ODYSSEY_STUB_SPEED` divides every delay; set it high in tests.
  */
 
+import { computeLedger, fromPrior, surfaceOf } from "../agents/risk";
+import { gateTrace } from "../agents/prd-gate";
 import { renderSpec } from "../agents/spec-format";
 import { writeArtifact } from "../workspace";
 import type {
@@ -240,16 +242,48 @@ export const stubAgents: Agents = {
     };
   },
 
-  async assessRisk(ctx): Promise<RiskItem[]> {
+  /**
+   * The one stub that is not a stub.
+   *
+   * The risk ledger's whole first layer is arithmetic over a route list, a PRD and the
+   * run's own results — no model, no key, no network — so the offline path computes the
+   * real thing rather than reading out a written-one. There used to be a `fx.RISKS`
+   * here, and it was a list of plausible sentences about an application nobody had
+   * looked at: "Payment provider iframe — card entry, 84/100" printed under a run
+   * against TodoMVC. That is the exact failure mode this repo keeps deleting.
+   *
+   * Only the model's review pass is skipped, which is what "stubbed" honestly means.
+   */
+  async assessRisk(ctx, req): Promise<RiskItem[]> {
     await sleep(400, ctx.signal);
-    return fx.RISKS;
+    const { surfaces, priors } = await computeLedger(ctx, req);
+    ctx.tool(
+      "orchestrator",
+      "risk_ledger",
+      `${priors.length} of ${surfaces.length} discovered surfaces have no evidence behind them, scored from fixed factors.`,
+    );
+    return priors.map((p) => fromPrior(p, surfaceOf(surfaces, p.surface)));
   },
 
-  async tracePrd(ctx): Promise<PrdRequirement[] | undefined> {
+  /**
+   * The fixture mapping, resolved against what this run actually did.
+   *
+   * The mapping stays a fixture — extracting requirements from a document needs a model.
+   * The *coverage* does not: it is resolved through `gateTrace` from the run's own
+   * results, exactly as the real stage resolves it. Returning the fixture verbatim
+   * printed "✅ proven" beside a requirement whose only test had failed, which is the
+   * single claim this table exists to make impossible.
+   */
+  async tracePrd(ctx, req): Promise<PrdRequirement[] | undefined> {
     if (!ctx.input.prd) return undefined;
     await sleep(300, ctx.signal);
     ctx.tool("orchestrator", "Read", `${ctx.input.prd.filename} — mapping requirements to scenarios`);
-    return fx.PRD_TRACE;
+    const { requirements } = gateTrace(
+      fx.PRD_TRACE.map((r) => ({ id: r.id, text: r.text, quote: "", coveredBy: r.coveredBy })),
+      req.scenarios,
+      req.results,
+    );
+    return requirements;
   },
 };
 

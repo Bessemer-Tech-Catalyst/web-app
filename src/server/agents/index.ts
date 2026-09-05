@@ -1,12 +1,14 @@
 /**
  * Which agents are real, per method.
  *
- * Phases 3-5 ship Recon, the Planner, the Critic, the Generator, the Executor, the
- * defect Classifier and the Healer. The report's risk ledger and PRD trace are still
- * `stubAgents`, and the composition below is a per-method merge rather than an
- * all-or-nothing switch on purpose: being able to run "real Planner, stubbed everything
- * else" is what makes a six-stage pipeline debuggable, and the all-stub configuration
- * stays the offline fallback for a demo with no network.
+ * Phases 3-6 ship every stage: Recon, the Planner, the Critic, the Generator, the
+ * Executor, the defect Classifier, the Healer, and — since Phase 6 — the risk ledger and
+ * the PRD traceability matrix. Nothing on the `Agents` interface is a stand-in any more.
+ *
+ * The composition below is a per-method merge rather than an all-or-nothing switch on
+ * purpose: being able to run "real Planner, stubbed everything else" is what makes an
+ * eight-stage pipeline debuggable, and the all-stub configuration stays the offline
+ * fallback for a demo with no network.
  *
  * Selection is one environment variable:
  *
@@ -16,7 +18,7 @@
  *   ODYSSEY_REAL_AGENTS=recon,plan  as above, plus real Recon
  *
  * Method names match the `Agents` interface: recon, plan, critique, generate, execute,
- * triage, proposeHeal, rerun.
+ * triage, proposeHeal, rerun, assessRisk, tracePrd.
  * Naming a stage that has not been built yet is a configuration error and is reported as
  * one, rather than silently doing nothing.
  */
@@ -30,10 +32,23 @@ import { generate } from "./generator";
 import { execute } from "./executor";
 import { triage } from "./triage";
 import { proposeHeal, rerun } from "./healer";
+import { assessRisk } from "./risk";
+import { tracePrd } from "./prd-trace";
 import type { Agents } from "../orchestrator/agents";
 
-/** Everything Phases 3-5 implement for real. Extended in Phase 6. */
-const REAL: Partial<Agents> = { recon, plan, critique, generate, execute, triage, proposeHeal, rerun };
+/** Every stage the pipeline implements for real. Phase 6 was the last one. */
+const REAL: Partial<Agents> = {
+  recon,
+  plan,
+  critique,
+  generate,
+  execute,
+  triage,
+  proposeHeal,
+  rerun,
+  assessRisk,
+  tracePrd,
+};
 
 export type RealAgentName = keyof typeof REAL;
 

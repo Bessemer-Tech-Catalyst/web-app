@@ -302,15 +302,50 @@ export interface RiskItem {
   risk: Priority;
   score: number; // 0-100
   reasons: string[];
+  /**
+   * Whether the plan ever intended to cover this surface.
+   *
+   * `planned-only` is the sharp one: the plan named it, no test that ran reached it, so
+   * the intent exists and the evidence does not. A boolean here would collapse that back
+   * into "untested" and lose the most useful thing the ledger knows.
+   */
+  status?: "planned-only" | "untested";
+  /**
+   * The deterministic score before the model saw it, present only when the model moved
+   * it. A report that shows an adjusted number without the original is asking to be
+   * believed rather than checked.
+   */
+  priorScore?: number;
 }
 
 // --- PRD traceability -------------------------------------------------------
 
+/**
+ * How much evidence stands behind a requirement.
+ *
+ * The distinction between the middle two is the point of the whole matrix. A tick that
+ * means "a scenario mentions this" and a tick that means "a test proved this" are not
+ * the same claim, and only one of them is worth acting on.
+ */
+export type PrdCoverage =
+  /** A test covering it ran and passed. */
+  | "proven"
+  /** A test covering it ran and is red — there is evidence, and it is bad news. */
+  | "exercised"
+  /** The plan covers it; no test that ran reached it. Intent without evidence. */
+  | "planned-only"
+  /** Nothing in the plan addresses it. */
+  | "uncovered";
+
 export interface PrdRequirement {
   id: string;
   text: string;
+  /** True for `proven` and `exercised` only — a plan alone never sets this. */
   covered: boolean;
   coveredBy: string[];
+  status?: PrdCoverage;
+  /** Verbatim from the PRD, so the extraction can be checked against the document. */
+  quote?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -345,6 +380,50 @@ export interface TestQualityReport {
   remainingGaps: Gap[];
   risks: RiskItem[];
   prd?: PrdRequirement[];
+
+  /**
+   * Every surface Recon found, and whether the run produced evidence about it.
+   *
+   * This is the working that the two numbers above rest on: the risk ledger is the
+   * untested half of this list, scored, and "scenarios covered" is meaningless without
+   * the denominator. Carried in the report so a reader can check the arithmetic rather
+   * than take it.
+   */
+  surfaces?: SurfaceCoverage[];
+  /** Scenario ids no PRD requirement claims. Present only when a PRD was supplied. */
+  prdUntraced?: string[];
+}
+
+export type SurfaceStatus =
+  /** A test that ran touched this surface. There is evidence about it, green or red. */
+  | "exercised"
+  /** The plan named it; no test that ran reached it. Intent without evidence. */
+  | "planned-only"
+  /** Recon found it. Nothing in the plan addressed it at all. */
+  | "untested";
+
+/** How an attribution was made. Each one is checkable against a file in the workspace. */
+export type CoverageSignal =
+  /** The emitted spec navigates to this path — the path appears as a quoted string. */
+  | "navigation"
+  /** The emitted spec names a control matching this surface's label. */
+  | "control"
+  /** Only the scenario's own text names it; the emitted code does not. */
+  | "scenario-text"
+  | "none";
+
+/** Computed by `server/agents/coverage-map.ts`; declared here as part of the contract. */
+export interface SurfaceCoverage {
+  /** The route, exactly as Recon reported it. */
+  surface: string;
+  status: SurfaceStatus;
+  /** Scenario ids whose text names this surface. */
+  scenarios: string[];
+  /** Test ids whose emitted source reaches it. */
+  tests: string[];
+  signal: CoverageSignal;
+  /** One line naming the file or scenario the attribution rests on. */
+  basis?: string;
 }
 
 // ---------------------------------------------------------------------------
