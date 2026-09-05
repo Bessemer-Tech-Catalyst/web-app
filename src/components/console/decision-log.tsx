@@ -48,7 +48,12 @@ export function DecisionLog({ decisions }: { decisions: DecisionEvent[] }) {
       />
       <div className="max-h-[70vh] min-h-0 flex-1 overflow-y-auto">
         {count === 0 ? (
-          <Empty>Waiting on the first decision…</Empty>
+          // A log fills from the top, so its waiting state sits where the first entry
+          // will — not floating in the middle of the panel it is about to fill.
+          <Empty inline>
+            Waiting on the first decision — they appear here as the orchestrator makes
+            them, each with the evidence behind it
+          </Empty>
         ) : (
           <ol className="divide-y divide-base-850">
             {decisions.map((d) => (
