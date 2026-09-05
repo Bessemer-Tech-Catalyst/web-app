@@ -1164,3 +1164,40 @@ Six assertions pin it, including that a two-word quote is not evidence and does 
 citations**. That is the last thing §14.7 said this project owed.
 
 `pnpm verify` — 123 assertions.
+
+### 16.5 The confirming run
+
+`run_2bfc2a16`, against the fixed pipeline and the fixed ShopLite: **2 tests, both green**, 3
+quarantined with precise reasons, 3 re-plan attempts, 9m 34s, $0.20.
+
+- **Both emitted tests are signed-out tests**, which is the case that produced nothing two runs
+  ago. `sign-in-valid-credentials` fills the password with `process.env.ODYSSEY_PASSWORD!` — the
+  literal appears nowhere in `tests/` — and proved 16 of 16 locators live.
+- **`sign-in-invalid-credentials` emitted this time**, and it is the same scenario the previous run
+  quarantined over a field-validation clause ShopLite does not have. It asserts three rejection
+  cases. That is §16.1 confirmed.
+- **The provenance gate still bites**, which is the point of confirming rather than assuming: one
+  scenario was held for a single unproven locator out of fifteen (`getByRole("cell", { name: /SL-/ })`),
+  and another for emitting code with no locators at all.
+- **The risk ledger's review pass is live-verified.** `/shoplite/basket` came back `96 (computed 86)`
+  and `/shoplite/orders` `78 (computed 86)` — the model moved both, cited a Recon observation for
+  each, and the report prints the computed score beside the adjusted one. It also added a non-route
+  surface, *"Place order checkout action"*, citing the observation by index. Those are the first and
+  second of the six checks §14.7 left open, answered by a model rather than by a fixture.
+- **19 requirements traced, 0 invented citations, 19 of 19 quotes verified** against the document by
+  the new gate — and independently re-checked here under the same normalisation. Four `proven`,
+  seven `planned-only`, eight `uncovered`.
+
+That closes every item the Phase 6 handoff left open, and the handoff file is deleted rather than
+carried: what it asked to verify is recorded above, and what it asked to fix is in the code.
+
+### 16.6 Still open, honestly
+
+**A signed-out scenario cannot always be walked.** The Generator shares one signed-in browser with
+every scenario after it, and is forbidden from signing out for exactly that reason — so a scenario
+whose whole point is the anonymous state sometimes cannot reach it. It quarantined
+`signed-out-protected-route-redirect` for this on `run_2bfc2a16` with an accurate reason, having
+emitted the same kind of test on `run_6f0284ae` by reasoning about it instead of walking it. The
+fix is a second, isolated browser context for signed-out scenarios; it is not built. Until it is,
+this reports as a quarantine with a true explanation, which is the failure mode this project
+prefers.

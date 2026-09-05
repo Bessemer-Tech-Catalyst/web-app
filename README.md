@@ -345,8 +345,8 @@ This repo distinguishes "the code exists" from "a real run produced it", and say
 | Recon, Planner, Coverage Critic | ✅ real, **verified by live runs** — signed in unaided, crawled 11 authenticated routes, scored 62 → replanned → 82 |
 | Generator, Executor | ✅ real, **verified by a green live run** — 2 tests at 14/14 and 20/20 proven locators, `expected: 2, unexpected: 0`, $0.317 |
 | Classifier, Healer, rerun, ShopLite | ✅ real, **verified by a live run** — `run_8b37144b` classified a 500 as `APP_DEFECT` at 0.94 and left it red, healed a renamed control, and had a patch rejected by the assertion guard. $0.161 |
-| Coverage map, risk scoring | ✅ real and **pinned by 41 unit assertions** — arithmetic with a published weight table, no model involved, so it produces a true ledger even with no API key |
-| Risk review pass, PRD traceability | ✅ real, **verified by a live run** — `run_6f0284ae` published a ranked risk ledger led by *"Place order checkout submission, 95/100"* and traced 19 PRD requirements with 0 invented citations. Its quotes were all faithful and none of them would have grepped, which is what the quote gate below now catches |
+| Coverage map, risk scoring | ✅ real, **verified by a live run** — and pinned by unit assertions — arithmetic with a published weight table, no model involved, so it produces a true ledger even with no API key |
+| Risk review pass, PRD traceability | ✅ real, **verified by live runs** — on `run_2bfc2a16` the model moved `/shoplite/basket` to **96 (computed 86)** and `/shoplite/orders` to **78 (computed 86)**, citing a Recon observation for each, and added a non-route surface by index. 19 requirements traced, **0 invented citations, 19 of 19 quotes verified** against the document |
 | Re-plan on an unbuildable plan, credential hand-off, quote verification | ✅ real, **pinned by unit assertions**, and every one of them exists because a live run found the defect it fixes |
 
 **The console's fleet-level pages — Overview, Coverage, Defects, Schedule, Targets — describe the

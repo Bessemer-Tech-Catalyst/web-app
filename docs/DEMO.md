@@ -3,7 +3,8 @@
 Four and a half minutes, one browser, one terminal. Written to be read aloud while the
 pipeline runs, and to survive a target the organisers hand you on the day.
 
-The pipeline takes 8–12 minutes end to end against ShopLite. **The video is not a single
+The pipeline takes about ten minutes end to end against ShopLite — `run_2bfc2a16` was 9m 34s and
+$0.20 for five planned scenarios, of which two emitted and three were held with reasons. **The video is not a single
 unedited take** — start the run, narrate the stages that matter live, and cut to the
 finished report. Everything the script claims is on screen at the moment it is claimed.
 
@@ -174,5 +175,5 @@ Then the PRD trace.
   is deliberate — it must be obvious at a glance which application is which.
 - Keep the run's own Chrome window visible during Recon and Execute. Watching it hunt for
   a locator is what makes the claim legible.
-- Cut the two long waits (generation, execution). Say the elapsed time out loud instead of
-  hiding it: 8–12 minutes and about $0.35 is the honest number, and it is a good one.
+- Cut the two long waits (generation, execution). Say the elapsed time out loud instead of hiding
+  it: about ten minutes and twenty cents is the honest number, and it is a good one.

@@ -55,7 +55,36 @@ by the Generator.
 
 ---
 
-## 3. The three ideas we would defend in a viva
+## 3. What a live run of this actually produced
+
+`run_2bfc2a16` — ShopLite, with the PRD and the intent *"focus on checkout and authentication
+flows"*, no human between any two stages:
+
+```
+5 scenarios planned · 2 generated · 2 re-plans · 9m 34s · $0.20
+COVERAGE 74   PASS RATE 100% (2 of 2)   BUGS FILED 0   QUARANTINED 3   RESIDUAL RISK 3
+```
+
+- Both emitted tests proved every locator live — 16/16 and 5/5 — and both are *signed-out* tests
+  that sign in from an anonymous session. Neither file contains the password: they read
+  `process.env.ODYSSEY_PASSWORD`.
+- Three scenarios were held with reasons a person can act on, including one for a single unproven
+  locator out of fifteen.
+- The risk ledger moved two scores on review — `/shoplite/basket` to **96 (computed 86)**,
+  `/shoplite/orders` to **78 (computed 86)** — each citing a Recon observation, with the computed
+  score printed beside the adjusted one. It also added a surface that is not a route at all:
+  *"Place order checkout action"*.
+- 19 PRD requirements traced: 4 proven, 7 planned-only, 8 uncovered. **0 invented citations, and
+  19 of 19 quotes verified against the document.**
+
+The run before it, `run_6f0284ae`, found a genuine authentication defect in ShopLite that nobody
+had planted — two protected routes served their content to a browser carrying no session — and
+classified it `APP_DEFECT` at 0.72 with cross-test evidence, withholding the Healer. That bug is
+fixed, and the comment on the fix names the run that found it.
+
+---
+
+## 4. The three ideas we would defend in a viva
 
 **1. The sub-agents are table stakes; the orchestrator is the product.** Playwright ships
 a Planner, a Generator and a Healer today — `npx playwright init-agents` installs all
@@ -83,7 +112,7 @@ already caught the model in a live run:
 
 ---
 
-## 4. How to check the claims yourself
+## 5. How to check the claims yourself
 
 ```bash
 pnpm install && pnpm verify        # typecheck · lint · 123 assertions, ~2s, no API, no browser
@@ -98,7 +127,7 @@ console is rendered from. Nothing in the report is computed anywhere else.
 
 ---
 
-## 5. What is not finished, stated rather than implied
+## 6. What is not finished, stated rather than implied
 
 - The `storageState` hand-off carries the agents' own side effects into the generated
   suite: if Recon creates a record while crawling, the suite starts with it present.
@@ -107,6 +136,10 @@ console is rendered from. Nothing in the report is computed anywhere else.
   rather than solving the general case.
 - The defect classifier cannot know which `storageState` the suite ran with, so a failure
   caused by an unexpected session is harder for it to attribute than one caused by a 500.
+- **A signed-out scenario cannot always be walked.** The Generator shares one signed-in browser
+  with every scenario after it and may not sign out, so a scenario whose point is the anonymous
+  state sometimes cannot be reached. It quarantines with an accurate reason when that happens. The
+  fix is a second isolated browser context; it is not built.
 - The fleet-level pages in the console — Overview, Coverage, Defects, Schedule, Targets —
   describe the product around a single run and are driven by seeded data. **Every one of
   them says so on the page**, and every number inside a run is measured by that run.
