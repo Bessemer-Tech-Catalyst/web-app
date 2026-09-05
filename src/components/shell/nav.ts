@@ -38,9 +38,8 @@ export const NAV: NavSection[] = [
   {
     title: "Quality",
     items: [
+      { href: "/sites", label: "Sites", icon: IconTarget, matchPrefix: true },
       { href: "/coverage", label: "Coverage", icon: IconCoverage },
-      // No badge: a count in the navigation is a claim about live state, and this
-      // build has no cross-run defect store to count. See `SampleNotice`.
       { href: "/defects", label: "Defects", icon: IconDefect },
     ],
   },
