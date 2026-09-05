@@ -46,7 +46,10 @@ export function ActivityFeed({ activity }: { activity: ActivityEvent[] }) {
           `browser_fill_form fields=[{"target":"f5e102",…` — and with a horizontal scrollbar
           those rows drag the whole feed sideways, leaving the panel showing empty gutter
           while a run is streaming into it. The rows below break anywhere instead. */}
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-2">
+      <div
+        ref={scrollRef}
+        className="max-h-[55vh] min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-2"
+      >
         {activity.length === 0 ? (
           <Empty>Idle</Empty>
         ) : (

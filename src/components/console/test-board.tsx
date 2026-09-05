@@ -54,7 +54,7 @@ export function TestBoard({
           ) : null
         }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="max-h-[55vh] min-h-0 flex-1 overflow-y-auto">
         {tests.length === 0 ? (
           <Empty>No tests generated yet</Empty>
         ) : (

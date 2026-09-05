@@ -162,7 +162,11 @@ export function RunConsole({ runId }: { runId: string }) {
               ))}
             </div>
 
-            <div className="min-h-0 flex-1">
+            {/* A flex *container*, not just a flex item. Each panel below is
+                `flex min-h-0 flex-col` with a scrolling body, and that only bounds itself
+                if its parent establishes the height — as a plain block this div sized to
+                its content, so the feed clipped at the panel edge instead of scrolling. */}
+            <div className="flex min-h-0 flex-1 flex-col [&>*]:min-h-0 [&>*]:flex-1">
               {tab === "suite" && (
                 <TestBoard
                   tests={state.tests}

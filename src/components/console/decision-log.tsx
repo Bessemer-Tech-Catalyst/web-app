@@ -46,7 +46,7 @@ export function DecisionLog({ decisions }: { decisions: DecisionEvent[] }) {
         }
         subtitle="Every autonomous judgment, its reasoning, and the evidence behind it"
       />
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="max-h-[70vh] min-h-0 flex-1 overflow-y-auto">
         {count === 0 ? (
           <Empty>Waiting on the first decision…</Empty>
         ) : (
