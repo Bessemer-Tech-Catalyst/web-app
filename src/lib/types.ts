@@ -481,6 +481,16 @@ export type OrchestratorEvent = EventBase &
         tool: string;
         summary: string;
         ok: boolean;
+        /**
+         * The call in full, for the row that is opened: the arguments as the agent sent
+         * them, and for a failure the tool's own reply. `summary` is a line in a streaming
+         * feed and is squeezed to fit one — per-argument truncation at 80 characters, and
+         * an elided middle on an error — which is the wrong thing to read when the
+         * question is why a locator did not resolve. Capped, because a page snapshot is
+         * measured in tens of kilobytes and this is written to the event log and streamed
+         * to every open tab.
+         */
+        detail?: string;
       }
     | {
         type: "artifact";

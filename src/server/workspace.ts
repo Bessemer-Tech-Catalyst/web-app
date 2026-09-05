@@ -125,9 +125,14 @@ export default defineConfig({
     storageState: ${JSON.stringify(opts.storageState)},`
         : ""
     }
+    // Captured for every test, green or red. Playwright's defaults keep evidence only
+    // for failures, which is the right trade for CI and the wrong one here: a passing
+    // test is a claim that a flow works, and the frame and the recording are what let a
+    // reader check the claim instead of taking the word "passed" for it. Both are
+    // attached to the JSON report, so the Executor files them into the Artifacts rail.
     trace: "retain-on-failure",
-    video: "retain-on-failure",
-    screenshot: "only-on-failure",
+    video: "on",
+    screenshot: "on",
   },
   projects: [
     {
@@ -140,10 +145,9 @@ export default defineConfig({
           watched
             ? `
         // A locator is proven at whatever size the Generator browsed at, and a
-        // responsive app is a different app at a different width: a nav that is a row of
-        // buttons at 1280 is a hamburger at 900, so a locator resolved in one is missing
-        // or covered in the other. Proving at one viewport and asserting at another is
-        // not a test of the app, it is a test of the coincidence that they agree.
+        // responsive app is a different app at a different width, so the watched window's
+        // size is restated here rather than left to agree by luck. It currently matches
+        // the device default; stated anyway, so moving one does not silently split them.
         viewport: { width: ${WATCH_VIEWPORT.width}, height: ${WATCH_VIEWPORT.height} },`
             : ""
         }

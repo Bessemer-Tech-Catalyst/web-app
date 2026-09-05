@@ -24,11 +24,13 @@ export function headless(): boolean {
 export const headed = () => !headless();
 
 /**
- * Window geometry for a watched run. Small enough to sit beside the Odyssey UI on one
- * screen — the point of a headed run is watching the browser and the Decision Log
- * together, not filling the display with the app under test.
+ * Window geometry for a watched run: Chromium's own desktop size, the same one
+ * `devices["Desktop Chrome"]` pins. A watched run is shown at the size the app was built
+ * for rather than shrunk to sit beside the Odyssey UI — a squeezed window is a different
+ * app (a nav that is a row of buttons at 1280 is a hamburger at 900), so the watcher
+ * would be watching a layout no one ships.
  */
-export const WATCH_VIEWPORT = { width: 900, height: 620 };
+export const WATCH_VIEWPORT = { width: 1280, height: 720 };
 
 /**
  * How long the browser pauses after each action so a person can separate one step from
