@@ -150,7 +150,11 @@ export async function triage(
   const outcomes: TriageOutcome[] = [];
 
   try {
-    await withPlaywright(ctx.runId, ctx.input, "classifier", async (server) => {
+    await withPlaywright(
+      ctx.runId,
+      ctx.input,
+      "classifier",
+      async (server) => {
       for (const p of priors) {
         if (ctx.signal.aborted) break;
 
@@ -184,7 +188,9 @@ export async function triage(
 
         outcomes.push(merge(p.failure.testId, p.prior, p.evidence, out, ctx));
       }
-    });
+    },
+      ctx.target,
+    );
   } finally {
     await writeArtifact(ctx.runId, "triage.json", JSON.stringify(outcomes, null, 2));
   }

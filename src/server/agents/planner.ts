@@ -22,6 +22,7 @@ import { models } from "./models";
 import { planSchema, toScenarios } from "./schemas";
 import { renderSpec } from "./spec-format";
 import { credentialsBriefing } from "./credentials";
+import { siteBriefing } from "./site-policy";
 import type { AgentContext, PlanRequest, ReconResult } from "../orchestrator/agents";
 import type { Scenario } from "@/lib/types";
 
@@ -89,22 +90,38 @@ others scores the same twice and burns a re-plan cycle for nothing. Therefore:
   open. Unclosed gaps are carried into a risk ledger and reported honestly; deleted
   coverage is not, and is strictly worse.`;
 
+/**
+ * The prompt, plus everything the preflight learned about this particular target.
+ *
+ * With no preflight this is the constant it always was — the briefing is additive, and a
+ * run without one behaves exactly as it did before target profiling existed.
+ */
+function instructions(ctx: AgentContext): string {
+  if (!ctx.target) return INSTRUCTIONS;
+  return `${INSTRUCTIONS}\n\n${siteBriefing(ctx.target.profile, ctx.target.policy, "planner")}`;
+}
+
 export async function plan(ctx: AgentContext, req: PlanRequest): Promise<Scenario[]> {
   const tier = models.planner;
 
   const input = await buildInput(ctx, req);
 
-  const out = await withPlaywright(ctx.runId, ctx.input, "planner", (server) =>
+  const out = await withPlaywright(
+    ctx.runId,
+    ctx.input,
+    "planner",
+    (server) =>
     runStructured(ctx, {
       as: "planner",
       name: "Planner",
       tier,
-      instructions: INSTRUCTIONS,
+      instructions: instructions(ctx),
       input,
       outputType: planSchema,
       mcpServers: [server],
       maxTurns: 50,
     }),
+    ctx.target,
   );
 
   const scenarios = capped(ctx, toScenarios(out), scenarioBudget(ctx, req.attempt));

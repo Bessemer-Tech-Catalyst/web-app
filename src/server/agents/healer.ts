@@ -30,6 +30,7 @@ import { runDir, runPath } from "../paths";
 import { withPlaywright } from "./playwright-mcp";
 import { runStructured } from "./harness";
 import { models } from "./models";
+import { siteBriefing } from "./site-policy";
 import { healSchema, type HealOutput } from "./schemas";
 import { harvest, prove } from "./locator-provenance";
 import { keyOf, specsIn, type PwReport } from "./report-keys";
@@ -87,6 +88,17 @@ result; a test that passes because it stopped looking is a liability.
 
 Return the COMPLETE patched file, not a diff.`;
 
+/**
+ * The prompt, plus everything the preflight learned about this particular target.
+ *
+ * With no preflight this is the constant it always was — the briefing is additive, and a
+ * run without one behaves exactly as it did before target profiling existed.
+ */
+function instructions(ctx: AgentContext): string {
+  if (!ctx.target) return INSTRUCTIONS;
+  return `${INSTRUCTIONS}\n\n${siteBriefing(ctx.target.profile, ctx.target.policy, "healer")}`;
+}
+
 export async function proposeHeal(
   ctx: AgentContext,
   req: { testId: string; attempt: number; triage: TriageOutcome },
@@ -119,12 +131,16 @@ export async function proposeHeal(
   const ledger = new Set<string>();
   let out: HealOutput;
   try {
-    out = await withPlaywright(ctx.runId, ctx.input, "healer", (server) =>
+    out = await withPlaywright(
+      ctx.runId,
+      ctx.input,
+      "healer",
+      (server) =>
       runStructured(ctx, {
         as: "healer",
         name: `Healer — ${req.testId} #${req.attempt}`,
         tier: models.healer,
-        instructions: INSTRUCTIONS,
+        instructions: instructions(ctx),
         input: buildInput(ctx, req, file, before, error),
         outputType: healSchema,
         mcpServers: [server],
@@ -133,6 +149,7 @@ export async function proposeHeal(
           if (obs.ok) harvest(ledger, obs.output);
         },
       }),
+      ctx.target,
     );
   } catch (err) {
     if (ctx.signal.aborted) throw err;

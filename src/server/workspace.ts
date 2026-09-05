@@ -74,7 +74,7 @@ const TSCONFIG = `${JSON.stringify(
 export async function writePlaywrightConfig(
   runId: string,
   input: RunInput,
-  opts: { storageState?: string } = {},
+  opts: { storageState?: string; testIdAttribute?: string } = {},
 ) {
   await writeFile(
     runPath(runId, "playwright.config.ts"),
@@ -83,7 +83,10 @@ export async function writePlaywrightConfig(
   );
 }
 
-function playwrightConfig(input: RunInput, opts: { storageState?: string }): string {
+function playwrightConfig(
+  input: RunInput,
+  opts: { storageState?: string; testIdAttribute?: string },
+): string {
   const watched = headed();
   return `import { defineConfig, devices } from "@playwright/test";
 
@@ -132,7 +135,18 @@ export default defineConfig({
     // attached to the JSON report, so the Executor files them into the Artifacts rail.
     trace: "retain-on-failure",
     video: "on",
-    screenshot: "on",
+    screenshot: "on",${
+      opts.testIdAttribute && opts.testIdAttribute !== "data-testid"
+        ? `
+    // This application hangs its test hooks on \`${opts.testIdAttribute}\`, not on
+    // \`data-testid\`. Playwright's \`getByTestId()\` resolves \`data-testid\` and nothing
+    // else unless it is told otherwise, so without this line every test-id locator in
+    // the suite matches zero elements — and it fails looking exactly like a missing
+    // element, which is the most expensive kind of wrong. Detected by the preflight
+    // probe from the application's own markup; see \`agents/target-profile.ts\`.
+    testIdAttribute: ${JSON.stringify(opts.testIdAttribute)},`
+        : ""
+    }
   },
   projects: [
     {

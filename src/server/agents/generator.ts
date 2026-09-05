@@ -33,6 +33,7 @@ import { writeArtifact, writePlaywrightConfig } from "../workspace";
 import { withPlaywright } from "./playwright-mcp";
 import { runStructured } from "./harness";
 import { models } from "./models";
+import { siteBriefing } from "./site-policy";
 import { generatedTestSchema, type GeneratedTestOutput } from "./schemas";
 import { harvest, prove } from "./locator-provenance";
 import { credentialsBriefing, redactPassword } from "./credentials";
@@ -148,6 +149,17 @@ Quarantine is a genuinely useful result and it is reported as one: a quarantined
 with a precise reason is worth more to the team than a test that fails for a reason nobody
 can read. It is not a way to avoid committing to what you found.`;
 
+/**
+ * The prompt, plus everything the preflight learned about this particular target.
+ *
+ * With no preflight this is the constant it always was — the briefing is additive, and a
+ * run without one behaves exactly as it did before target profiling existed.
+ */
+function instructions(ctx: AgentContext): string {
+  if (!ctx.target) return INSTRUCTIONS;
+  return `${INSTRUCTIONS}\n\n${siteBriefing(ctx.target.profile, ctx.target.policy, "generator")}`;
+}
+
 export async function generate(
   ctx: AgentContext,
   req: { scenarios: Scenario[] },
@@ -164,7 +176,11 @@ export async function generate(
   // from. Losing it precisely when something went wrong — which is what happens if the
   // browser session throws on the way out — is losing it when it is worth the most.
   try {
-    await withPlaywright(ctx.runId, ctx.input, "generator", async (server) => {
+    await withPlaywright(
+      ctx.runId,
+      ctx.input,
+      "generator",
+      async (server) => {
       // --- the auth hand-off ---------------------------------------------------
       // Done before any scenario, because it reads the session the *shared profile* holds
       // and the first thing the agent does is start navigating around inside it.
@@ -182,9 +198,27 @@ export async function generate(
       const captured = await captureStorageState(ctx.runId, ctx.input.url, server);
       const state = captured && carriesSession(captured) ? captured : await readStorageState(ctx.runId);
 
+      // The test-hook attribute this application actually uses, detected by the
+      // preflight. It has to reach the config on *both* paths below, not just the
+      // signed-in one: a suite against an anonymous target needs it exactly as much, and
+      // getting it wrong is silent — `getByTestId` matches nothing and every test reads
+      // as a missing element. See `agents/target-profile.ts` for why this is the single
+      // highest-value line the probe produces.
+      const testIdAttribute = ctx.target?.profile.testIdAttr;
+      if (testIdAttribute && testIdAttribute !== "data-testid") {
+        ctx.tool(
+          "generator",
+          "playwright_config",
+          `Suite configured with testIdAttribute: "${testIdAttribute}" — this application does not use data-testid`,
+        );
+      }
+
       if (state && carriesSession(state)) {
         ctx.tool("generator", "browser_storage_state", describeStorageState(state));
-        await writePlaywrightConfig(ctx.runId, ctx.input, { storageState: STATE_FILE });
+        await writePlaywrightConfig(ctx.runId, ctx.input, {
+          storageState: STATE_FILE,
+          testIdAttribute,
+        });
         ctx.artifact("plan", "playwright.config.ts", "Suite config — signed-in storage state");
       } else {
         // Reported as a failed call rather than skipped quietly. On a credentialed run
@@ -203,6 +237,12 @@ export async function generate(
             : `Could not read ${STATE_FILE}; the suite will run without a session.`,
           false,
         );
+        // Still rewritten, because the test-id attribute matters to an anonymous suite
+        // exactly as much as to a signed-in one. Without this the scaffold's config —
+        // written before the preflight had run — is what the suite executes under.
+        if (testIdAttribute) {
+          await writePlaywrightConfig(ctx.runId, ctx.input, { testIdAttribute });
+        }
       }
 
       // --- one scenario at a time ----------------------------------------------
@@ -254,7 +294,7 @@ export async function generate(
             as: "generator",
             name: `Generator — ${scenario.id}`,
             tier,
-            instructions: INSTRUCTIONS,
+            instructions: instructions(ctx),
             input: buildInput(ctx, scenario, recon),
             outputType: generatedTestSchema,
             mcpServers: [server],
@@ -358,7 +398,9 @@ export async function generate(
         ctx.artifact("test", file, scenario.title, test.id);
         provenance.push({ scenarioId: scenario.id, title: scenario.title, outcome: "emitted", file, proof, ledger: [...ledger] });
       }
-    });
+    },
+      ctx.target,
+    );
   } finally {
     // Kept as an artifact because it is the evidence behind every selector-provenance
     // claim the report makes, and because Phase 5's classifier asks "did this locator

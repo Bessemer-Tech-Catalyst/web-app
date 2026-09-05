@@ -16,6 +16,7 @@ import type { z } from "zod";
 import { configureOpenAI, runSecrets } from "./openai";
 import { priceUsage, type ModelTier } from "./models";
 import { redact } from "../event-log";
+import { errorText, withDeadline, withRetry } from "./resilience";
 import type { AgentContext } from "../orchestrator/agents";
 import type { AgentName } from "@/lib/types";
 
@@ -42,6 +43,14 @@ export interface AgentRunSpec<S extends z.ZodType> {
   /** Hard ceiling on agentic looping. A wedged agent is a hung demo. */
   maxTurns?: number;
   /**
+   * Wall-clock ceiling for this stage, in milliseconds.
+   *
+   * Separate from `maxTurns` because they bound different things: turns bound thinking,
+   * this bounds waiting. A crawl of a slow production site legitimately needs longer
+   * than a critique of a plan that is already written.
+   */
+  deadlineMs?: number;
+  /**
    * Every tool call's full reply, as it lands.
    *
    * The Generator needs this: Playwright MCP answers a click, a fill or a
@@ -54,15 +63,73 @@ export interface AgentRunSpec<S extends z.ZodType> {
 }
 
 /**
+ * How long one agent may run before the orchestrator takes the stage back.
+ *
+ * `maxTurns` bounds how many times an agent may *think*; it bounds nothing about how
+ * long a single tool call may hang, and a browser waiting on a page that will never
+ * settle hangs for as long as anybody lets it. Twelve minutes is generous for every
+ * stage in this pipeline and short enough that a wedged one is still a run rather than
+ * an afternoon. Overridable per stage, and per process for a slow target.
+ */
+const DEFAULT_STAGE_MS = 12 * 60_000;
+
+function stageCeilingMs(spec: { deadlineMs?: number }): number {
+  const env = Number(process.env.ODYSSEY_STAGE_TIMEOUT_MS);
+  if (Number.isFinite(env) && env > 0) return env;
+  return spec.deadlineMs ?? DEFAULT_STAGE_MS;
+}
+
+/**
  * Runs one agent to a validated structured output, narrating as it goes.
  *
  * Throws if the model finishes without producing output that satisfies the schema —
  * the caller decides whether that is fatal or falls back, because "the Planner failed"
  * and "Recon failed" have very different consequences for a run.
+ *
+ * A transient failure underneath — a rate limit, a dropped socket, a browser that did
+ * not come up — is retried once before any of that reaches the caller, and the whole
+ * attempt runs under a wall clock so a hung tool call ends the stage instead of the day.
  */
 export async function runStructured<S extends z.ZodType>(
   ctx: AgentContext,
   spec: AgentRunSpec<S>,
+): Promise<z.infer<S>> {
+  return withRetry(
+    (attempt) =>
+      withDeadline(
+        `${spec.name}${attempt > 1 ? ` (attempt ${attempt})` : ""}`,
+        stageCeilingMs(spec),
+        (signal) => runOnce(ctx, spec, signal),
+        ctx.signal,
+      ),
+    {
+      // Two attempts, not three. A stage here is the most expensive unit of work in the
+      // run — an agentic loop with a browser attached — and the second attempt already
+      // costs what the first did. Beyond that the money is better spent on the stages
+      // that have not run yet, which is what the graceful degradation in `run.ts` does
+      // with it.
+      attempts: 2,
+      baseDelayMs: 2_000,
+      maxDelayMs: 15_000,
+      totalMs: 45_000,
+      signal: ctx.signal,
+      onRetry: ({ attempt, delayMs, error }) =>
+        ctx.tool(
+          spec.as,
+          "retry",
+          `${spec.name} hit a transient failure on attempt ${attempt} — retrying in ${Math.round(delayMs / 1000)}s`,
+          false,
+          errorText(error),
+        ),
+    },
+  );
+}
+
+/** One attempt. Everything that can be retried is above; everything below runs once. */
+async function runOnce<S extends z.ZodType>(
+  ctx: AgentContext,
+  spec: AgentRunSpec<S>,
+  signal: AbortSignal,
 ): Promise<z.infer<S>> {
   configureOpenAI();
   const secrets = runSecrets(ctx.input.credentials);
@@ -84,7 +151,10 @@ export async function runStructured<S extends z.ZodType>(
 
   const stream = await run(agent, spec.input, {
     stream: true,
-    signal: ctx.signal,
+    // The deadline's signal, not the run's. It is derived from `ctx.signal`, so a
+    // cancelled run still collapses everything below it — and a stage that has run past
+    // its own ceiling now stops too, which `ctx.signal` alone could never do.
+    signal,
     maxTurns: spec.maxTurns ?? 40,
   });
 

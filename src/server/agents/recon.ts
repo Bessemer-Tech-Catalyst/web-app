@@ -17,9 +17,11 @@ import { withPlaywright } from "./playwright-mcp";
 import { runStructured } from "./harness";
 import { models } from "./models";
 import { reconSchema, toEvidence } from "./schemas";
+import { siteBriefing } from "./site-policy";
+import { crawlBriefing } from "./route-scope";
 import type { AgentContext, ReconResult } from "../orchestrator/agents";
 
-const INSTRUCTIONS = `You are Recon, the first agent in an autonomous end-to-end test pipeline.
+const BASE_INSTRUCTIONS = `You are Recon, the first agent in an autonomous end-to-end test pipeline.
 
 Your job is to map an unfamiliar web application so a Planner can write a test plan
 against it, and to leave the browser in whatever session state the Planner will need.
@@ -37,9 +39,12 @@ Method:
    confirm a signed-in affordance is present (an account menu, a sign-out control, a
    greeting). Do not report authenticated:true on the strength of a form submission
    that you did not verify.
-3. Crawl breadth-first from the landing page to a depth of 2. Prefer distinct routes
-   over pagination and query-string variants of a page you have already seen. Stop at
-   20 routes or when the frontier is exhausted, whichever comes first.
+3. Crawl from the landing page outward, best-first rather than blindly breadth-first:
+   at each step go to the most informative unvisited surface, not the next link in
+   document order. The crawl budget below is not advice — navigations outside the
+   target's domain and navigations past the surface budget are refused by the harness
+   before the browser sees them, and the refusal tells you what is left. Plan around it
+   rather than discovering it.
 4. Do not perform destructive actions. Do not place orders, delete records, change
    settings or send messages. You are mapping, not exercising.
 
@@ -53,19 +58,68 @@ Report:
   states, permission-gated pages, destructive controls, error paths. Each is one
   evidence item with kind "heuristic" unless a more specific kind genuinely fits.`;
 
+/**
+ * The prompt, with everything the preflight learned appended.
+ *
+ * Kept as a function rather than a constant because the second half is different for
+ * every target: how far to crawl, which hosts are in scope, what stands in front of the
+ * content, and what kind of application this appears to be. With no preflight it returns
+ * exactly the constant it always was.
+ */
+function instructions(ctx: AgentContext): string {
+  if (!ctx.target) return BASE_INSTRUCTIONS;
+  return [
+    BASE_INSTRUCTIONS,
+    "",
+    crawlBriefing(
+      ctx.target.crawl,
+      {
+        origin: ctx.target.profile.origin,
+        registrableDomain: ctx.target.profile.registrableDomain,
+        robotsDisallow: ctx.target.profile.robotsDisallow,
+      },
+      ctx.target.profile.sameOriginPaths,
+    ),
+    "",
+    siteBriefing(ctx.target.profile, ctx.target.policy, "recon"),
+  ].join("\n");
+}
+
+/**
+ * The turn ceiling, derived from the crawl budget rather than pinned at a magic number.
+ *
+ * A surface costs a navigate, a snapshot, and — on a client-rendered application —
+ * usually a settle and a second snapshot: call it three to four turns each. A ceiling
+ * that does not move with the budget is the quiet failure this used to have, where a
+ * crawl allowed twenty surfaces was cut off by a sixty-turn limit at around fifteen and
+ * reported a short route list rather than an error.
+ */
+function turnsFor(ctx: AgentContext): number {
+  const surfaces = ctx.target?.crawl.maxSurfaces ?? 20;
+  const perSurface = ctx.target?.profile.rendering === "client" ? 4 : 3;
+  return Math.max(60, Math.min(200, surfaces * perSurface + 15));
+}
+
 export async function recon(ctx: AgentContext): Promise<ReconResult> {
   const tier = models.recon;
 
-  const out = await withPlaywright(ctx.runId, ctx.input, "recon", async (server) => {
+  const out = await withPlaywright(
+    ctx.runId,
+    ctx.input,
+    "recon",
+    async (server) => {
     const result = await runStructured(ctx, {
       as: "recon",
       name: "Recon",
       tier,
-      instructions: INSTRUCTIONS,
+      instructions: instructions(ctx),
       input: buildInput(ctx),
       outputType: reconSchema,
       mcpServers: [server],
-      maxTurns: 60,
+      maxTurns: turnsFor(ctx),
+      // The crawl is the longest-running stage and the one most exposed to a slow
+      // target, so it gets the most room before the wall clock takes the stage back.
+      deadlineMs: 15 * 60_000,
     });
 
     // The session hand-off, taken here because *this* is the browser that performed the
@@ -91,7 +145,17 @@ export async function recon(ctx: AgentContext): Promise<ReconResult> {
       );
     }
     return result;
-  });
+    },
+    ctx.target,
+    (attempt, delayMs, error) =>
+      ctx.tool(
+        "recon",
+        "browser_connect",
+        `The browser did not start on attempt ${attempt} — retrying in ${Math.round(delayMs / 1000)}s`,
+        false,
+        String(error),
+      ),
+  );
 
   const result: ReconResult = {
     routes: dedupe(out.routes),

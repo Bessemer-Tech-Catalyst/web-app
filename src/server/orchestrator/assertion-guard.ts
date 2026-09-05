@@ -135,10 +135,24 @@ export function checkAssertionIntegrity(before: string, after: string): GuardVer
 
   // Pair by subject first: a healer legitimately rewrites the *locator* inside
   // expect(), so fall back to positional pairing when the subject moved.
+  //
+  // The fallback takes `pool[0]` — the earliest item not yet claimed — rather than an
+  // index derived from `i`, the assertion's position in the *original, unshrunk* `a`.
+  // Exact-subject matches are consumed from `pool` in the same order `a` is walked, so
+  // whatever remains in `pool` when a subject-match fails is already in original
+  // relative order; `pool[0]` is provably the correct partner. `Math.min(i, pool.length
+  // - 1)` is not: `i` keeps counting the full original array while `pool` has been
+  // shrinking, so once a few items have been claimed it names the *wrong slot* — on a
+  // real run (`run_0aa69767`) this mispaired a Healer's `.first()` addition on a
+  // "2× Copper stovetop kettle" assertion against an unrelated, untouched "£84.00"
+  // assertion nine lines later (the two shared no subject, but the test happened to
+  // repeat the `£84.00` cell locator once on the basket page and once on the order
+  // history page), and it read the mismatch as an "expected value changed" violation —
+  // rejecting a correct fix for a defect that was never there.
   const pool = [...b];
-  for (const [i, prev] of a.entries()) {
+  for (const prev of a) {
     const bySubject = pool.findIndex((x) => x.subject === prev.subject);
-    const idx = bySubject >= 0 ? bySubject : pool.findIndex((_, j) => j === Math.min(i, pool.length - 1));
+    const idx = bySubject >= 0 ? bySubject : pool.length > 0 ? 0 : -1;
     if (idx < 0) {
       violations.push(`assertion on \`${prev.subject}\` has no counterpart after the patch`);
       continue;
