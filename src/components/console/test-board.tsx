@@ -1,13 +1,30 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, Section, SectionHeader, Empty, type Tone } from "@/components/ui/primitives";
 import { cn, formatDuration } from "@/lib/format";
 import {
   TRIAGE_META,
   type GeneratedTest,
   type HealAttempt,
+  type OrchestratorEvent,
   type TestResult,
   type TestStatus,
   type TriageOutcome,
 } from "@/lib/types";
+
+type ArtifactEvent = Extract<OrchestratorEvent, { type: "artifact" }>;
+
+/** What a run's artifact endpoint expects: every segment encoded, slashes kept. */
+const artifactHref = (runId: string, path: string) =>
+  `/api/runs/${runId}/artifacts/${path.split("/").map(encodeURIComponent).join("/")}`;
+
+const EVIDENCE_LABEL: Partial<Record<ArtifactEvent["kind"], string>> = {
+  trace: "trace",
+  video: "video",
+  screenshot: "screenshot",
+  patch: "heal diff",
+};
 
 const STATUS_TONE: Record<TestStatus, Tone> = {
   passed: "ok",
@@ -19,21 +36,44 @@ const STATUS_TONE: Record<TestStatus, Tone> = {
 };
 
 export function TestBoard({
+  runId,
   tests,
   results,
   triage,
   heals,
+  artifacts,
 }: {
+  runId: string;
   tests: GeneratedTest[];
   results: Record<string, TestResult>;
   triage: TriageOutcome[];
   heals: HealAttempt[];
+  artifacts: ArtifactEvent[];
 }) {
   const counts = tests.reduce<Record<string, number>>((acc, t) => {
     const st = results[t.id]?.status ?? "pending";
     acc[st] = (acc[st] ?? 0) + 1;
     return acc;
   }, {});
+
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const toggle = useCallback(
+    (id: string) => setOpen((prev) => ({ ...prev, [id]: !prev[id] })),
+    [],
+  );
+
+  // The evidence a run produced for one test, indexed once rather than filtered per row.
+  // The spec file itself is left out: it is rendered inline below, not linked away to.
+  const evidence = useMemo(() => {
+    const byTest = new Map<string, ArtifactEvent[]>();
+    for (const a of artifacts) {
+      if (!a.testId || a.kind === "test") continue;
+      const list = byTest.get(a.testId);
+      if (list) list.push(a);
+      else byTest.set(a.testId, [a]);
+    }
+    return byTest;
+  }, [artifacts]);
 
   return (
     <Section flush className="flex min-h-0 flex-col">
@@ -64,6 +104,7 @@ export function TestBoard({
               const status = result?.status ?? "pending";
               const verdict = triage.find((v) => v.testId === t.id);
               const testHeals = heals.filter((h) => h.testId === t.id);
+              const expanded = open[t.id] ?? false;
 
               return (
                 <li
@@ -73,15 +114,34 @@ export function TestBoard({
                   <div className="flex items-start gap-2.5">
                     <StatusGlyph status={status} />
                     <div className="min-w-0 flex-1">
-                      <p
-                        className={cn(
-                          "text-[13px] leading-snug",
-                          status === "pending" ? "text-base-500" : "text-base-200",
-                        )}
+                      {/* The row is the disclosure. A file path printed as dead text says
+                          a test was written; the source says what it actually asserts,
+                          and that is the thing worth checking. */}
+                      <button
+                        type="button"
+                        onClick={() => toggle(t.id)}
+                        aria-expanded={expanded}
+                        className="group flex w-full items-start gap-1.5 text-left"
                       >
-                        {t.title}
-                      </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "mt-0.75 shrink-0 font-mono text-[9px] text-base-600 transition-transform group-hover:text-base-400",
+                            expanded && "rotate-90",
+                          )}
+                        >
+                          ▶
+                        </span>
+                        <span
+                          className={cn(
+                            "text-[13px] leading-snug transition group-hover:text-base-100",
+                            status === "pending" ? "text-base-500" : "text-base-200",
+                          )}
+                        >
+                          {t.title}
+                        </span>
+                      </button>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 pl-3.75">
                         <span className="font-mono text-[10px] text-base-600">
                           {t.file}
                         </span>
@@ -148,6 +208,13 @@ export function TestBoard({
                           </p>
                         </div>
                       ))}
+
+                      {expanded ? (
+                        <div className="mt-2 pl-3.75">
+                          <SpecSource key={t.file} runId={runId} file={t.file} />
+                          <Evidence runId={runId} artifacts={evidence.get(t.id) ?? []} />
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </li>
@@ -157,6 +224,91 @@ export function TestBoard({
         )}
       </div>
     </Section>
+  );
+}
+
+/**
+ * The emitted spec, read back off disk.
+ *
+ * Fetched rather than streamed through the event log: the file is already served by the
+ * run's artifact endpoint, and putting a few kilobytes of source into every
+ * `test.generated` event would bloat the log that the whole console replays on reload.
+ * This component only mounts when a row is open, so nothing is fetched until it is asked
+ * for, and a run of twenty tests still costs one request.
+ */
+function SpecSource({ runId, file }: { runId: string; file: string }) {
+  const [state, setState] = useState<
+    { status: "loading" } | { status: "ok"; code: string } | { status: "error"; message: string }
+  >({ status: "loading" });
+
+  useEffect(() => {
+    const abort = new AbortController();
+    // No reset to "loading" here: the effect's inputs are fixed for the life of this
+    // component — a row's file never changes under it, and the call site keys on it —
+    // so the initial state is already the right one and re-setting it only costs a
+    // render.
+    fetch(artifactHref(runId, file), { signal: abort.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`${res.status} — the file is not on disk`);
+        return res.text();
+      })
+      .then((code) => setState({ status: "ok", code }))
+      .catch((err: unknown) => {
+        if (abort.signal.aborted) return;
+        setState({
+          status: "error",
+          message: err instanceof Error ? err.message : "Could not read the file",
+        });
+      });
+    return () => abort.abort();
+  }, [runId, file]);
+
+  return (
+    <div className="overflow-hidden rounded border border-base-800 bg-base-950">
+      <div className="flex items-center gap-2 border-b border-base-850 px-2.5 py-1.5">
+        <span className="truncate font-mono text-[10px] text-base-500">{file}</span>
+        <a
+          href={artifactHref(runId, file)}
+          target="_blank"
+          rel="noreferrer"
+          className="ml-auto shrink-0 font-mono text-[10px] text-base-500 transition hover:text-base-200"
+        >
+          open raw ↗
+        </a>
+      </div>
+      {state.status === "loading" ? (
+        <p className="px-2.5 py-2 font-mono text-[10px] text-base-600">Reading the file…</p>
+      ) : state.status === "error" ? (
+        <p className="px-2.5 py-2 font-mono text-[10px] text-danger-400/90">{state.message}</p>
+      ) : (
+        // Capped and scrollable: a spec is routinely longer than the panel it sits in,
+        // and a row that grows to 200 lines pushes every other test off the screen.
+        <pre className="max-h-72 overflow-auto px-2.5 py-2 font-mono text-[10px] leading-[1.55] text-base-300">
+          <code>{state.code}</code>
+        </pre>
+      )}
+    </div>
+  );
+}
+
+/** Trace, video, screenshots, heal diffs — what the run recorded while this test ran. */
+function Evidence({ runId, artifacts }: { runId: string; artifacts: ArtifactEvent[] }) {
+  if (artifacts.length === 0) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      {artifacts.map((a) => (
+        <a
+          key={`${a.seq}`}
+          href={artifactHref(runId, a.path)}
+          target="_blank"
+          rel="noreferrer"
+          title={a.path}
+          className="rounded border border-base-800 bg-base-900 px-1.5 py-0.5 font-mono text-[10px] text-base-400 transition hover:border-base-700 hover:text-base-100"
+        >
+          {EVIDENCE_LABEL[a.kind] ?? a.kind} ↗
+        </a>
+      ))}
+    </div>
   );
 }
 
