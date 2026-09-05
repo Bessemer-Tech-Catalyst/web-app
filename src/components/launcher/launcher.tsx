@@ -8,6 +8,7 @@ import { Badge, Section, Dot } from "@/components/ui/primitives";
 import { DEFAULT_RUN_OPTIONS, type RunInput, type RunOptions } from "@/lib/types";
 import { cn } from "@/lib/format";
 import { startRun } from "@/lib/run-client";
+import { DictateButton } from "./dictate-button";
 
 // three.js is dead weight until the hero paints — and it needs a DOM, so no SSR pass.
 const HeroCanvas = dynamic(
@@ -44,6 +45,7 @@ export function Launcher() {
   const query = useSearchParams();
   const [url, setUrl] = useState(query.get("url") ?? "");
   const [intent, setIntent] = useState("");
+  const [dictationError, setDictationError] = useState<string | null>(null);
   const [prd, setPrd] = useState<{ filename: string; text: string } | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -268,17 +270,37 @@ export function Launcher() {
               >
                 Intent <Badge>optional</Badge>
               </label>
-              <textarea
-                id="intent"
-                value={intent}
-                onChange={(e) => setIntent(e.target.value)}
-                rows={3}
-                placeholder="focus on checkout and authentication flows"
-                className="w-full resize-none rounded-md border border-base-800 bg-base-950/80 px-3 py-2.5 text-sm text-base-100 placeholder:text-base-600"
-              />
-              <p className="mt-1.5 text-xs text-base-600">
-                Plain English. It steers the planner&apos;s scope and priorities.
-              </p>
+              <div className="relative">
+                <textarea
+                  id="intent"
+                  value={intent}
+                  onChange={(e) => setIntent(e.target.value)}
+                  rows={3}
+                  placeholder="focus on checkout and authentication flows"
+                  className="w-full resize-none rounded-md border border-base-800 bg-base-950/80 py-2.5 pl-3 pr-12 text-sm text-base-100 placeholder:text-base-600"
+                />
+                {/* Dictation lands *inside* the field it fills, so it reads as part of the
+                    input rather than a second control with its own meaning. */}
+                <DictateButton
+                  className="absolute bottom-2.5 right-2.5"
+                  onError={setDictationError}
+                  onTranscript={(text) =>
+                    // Append: someone who typed half a sentence and then spoke the rest
+                    // should not lose the half they typed.
+                    setIntent((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))
+                  }
+                />
+              </div>
+              {/* A failed transcription replaces the hint rather than squeezing in beside
+                  the mic — Sarvam's own messages are the useful ones and they are long. */}
+              {dictationError ? (
+                <p className="mt-1.5 text-xs text-danger-400">{dictationError}</p>
+              ) : (
+                <p className="mt-1.5 text-xs text-base-600">
+                  Plain English, typed or spoken. It steers the planner&apos;s scope and
+                  priorities.
+                </p>
+              )}
             </div>
 
             <div className="px-6 py-5">
