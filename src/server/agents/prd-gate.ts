@@ -12,7 +12,16 @@
  *      counted — an extraction that invents three references is telling you something
  *      about how much to trust the other forty.
  *
- *   2. **Confusing a plan with evidence.** This is the important one. A requirement
+ *   2. **Quotes the document does not contain.** Every requirement is required to carry a
+ *      verbatim quote, on the theory that a reader can check any row against the PRD in
+ *      seconds. That was a promise until `run_6f0284ae`, where every quote was real and
+ *      *none* of them would have grepped: the document wraps its lines and the model
+ *      joined them with spaces. A check a reader gives up on is not a check, so the
+ *      quotes are verified here — against whitespace-normalised text, because the wrap is
+ *      the document's formatting and not the model's claim — and a quote the PRD does not
+ *      contain is dropped and counted like an invented id.
+ *
+ *   3. **Confusing a plan with evidence.** This is the important one. A requirement
  *      mapped to a scenario that was quarantined, or that never became a running test,
  *      has *no test behind it*. Reporting that as covered is precisely the failure the
  *      whole product argues against: the plan is an intention, and only a test that ran
@@ -42,6 +51,32 @@ export interface GateResult {
   requirements: PrdRequirement[];
   /** `${requirementId} → ${scenarioId}` for every reference the plan does not contain. */
   invented: string[];
+  /** Requirement ids whose quote does not appear in the document. */
+  misquoted: string[];
+}
+
+/**
+ * Everything that is the document's formatting rather than the model's claim.
+ *
+ * Line wrapping, runs of spaces, and the typographic quotes and dashes a model reflows
+ * ASCII into. Nothing else: normalising harder would start passing quotes that differ in
+ * what they actually say, which is the thing being checked for.
+ */
+function normalise(text: string): string {
+  return text
+    .replace(/[\u2018\u2019\u02bc]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Whether `quote` appears in `document`, ignoring only the differences above. */
+export function quoteAppearsIn(quote: string, document: string): boolean {
+  const needle = normalise(quote);
+  // A quote of two or three words is not evidence of anything and will match by accident.
+  if (needle.length < 12) return false;
+  return normalise(document).includes(needle);
 }
 
 /**
@@ -55,9 +90,12 @@ export function gateTrace(
   traced: TracedRequirement[],
   scenarios: Scenario[],
   results: TestResult[],
+  /** The PRD as supplied. Omitted only where there is no document to check against. */
+  document?: string,
 ): GateResult {
   const known = new Set(scenarios.map((s) => s.id));
   const invented: string[] = [];
+  const misquoted: string[] = [];
 
   const requirements = traced.map((req) => {
     const real: string[] = [];
@@ -69,10 +107,17 @@ export function gateTrace(
     const statuses = real.map((id) => resultFor(results, id)?.status);
     const status = resolve(real.length, statuses);
 
+    const quoted = req.quote?.trim() || undefined;
+    const verified = quoted && document ? quoteAppearsIn(quoted, document) : true;
+    if (quoted && !verified) misquoted.push(req.id);
+
     return {
       id: req.id,
       text: req.text,
-      quote: req.quote || undefined,
+      // A quote the document does not contain is a fabricated citation, and it is dropped
+      // rather than printed with a caveat: a reader who checks one row and finds it wrong
+      // has no way to know which of the others to trust.
+      quote: verified ? quoted : undefined,
       coveredBy: real,
       status,
       // A requirement is covered when a test that ran stands behind it. Green or red,
@@ -81,7 +126,7 @@ export function gateTrace(
     } satisfies PrdRequirement;
   });
 
-  return { requirements, invented };
+  return { requirements, invented, misquoted };
 }
 
 /** The four-way answer, resolved from the strongest evidence any mapped scenario has. */

@@ -47,7 +47,11 @@ What a good plan looks like:
   and if one of the three cannot be reached it quarantines the whole thing. Bundling
   loses the two that would have worked.
 - Steps are what a user does, in order, in plain language.
-- "expected" is a single observable outcome, specific enough to fail on.
+- "expected" is a *single* observable outcome, specific enough to fail on — and grounded in
+  something Recon actually observed. "The order confirmation shows an order identifier" is
+  one outcome. "The confirmation shows an identifier, a date, the lines and the total" is
+  four, and if the application happens not to render one of them the agent that writes the
+  test has to decide what to do with the other three.
 - Coverage spans kinds, not just happy paths. Negative input, permission boundaries,
   error states, edge cases and destructive actions are where real defects live, and a
   plan made only of happy paths will be sent back to you by the Coverage Critic.

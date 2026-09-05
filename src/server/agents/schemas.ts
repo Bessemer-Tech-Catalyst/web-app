@@ -160,11 +160,16 @@ export function toCritique(
 export const generatedTestSchema = z.object({
   outcome: z
     .enum(["emit", "quarantine"])
-    .describe("emit only if every element the test needs was found on the live page"),
+    .describe(
+      "emit whenever you reached the scenario's main flow and proved at least one assertion that " +
+        "would fail if the feature were broken — even if some clause of the scenario was not " +
+        "reachable. quarantine only when the flow itself could not be reached at all.",
+    ),
   reason: z
     .string()
     .describe(
-      "One or two sentences a person will read. On quarantine, name the element or state you could not reach.",
+      "One or two sentences a person will read. On quarantine, name the element or state you could " +
+        "not reach. On emit, leave it empty unless you dropped a clause — then name the clause and why.",
     ),
   code: z
     .string()

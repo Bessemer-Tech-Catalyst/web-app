@@ -16,7 +16,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { gateTrace, untracedScenarios, type TracedRequirement } from "./prd-gate.ts";
+import { gateTrace, quoteAppearsIn, type TracedRequirement, untracedScenarios } from "./prd-gate.ts";
 import type { Scenario, TestResult } from "@/lib/types";
 
 const scenario = (id: string): Scenario => ({
@@ -121,4 +121,59 @@ test("the verbatim quote is carried through, so the extraction can be checked", 
 test("scenarios no requirement claims are reported — the matrix reads both ways", () => {
   const { requirements } = gateTrace([req("REQ-1", ["signin"])], PLAN, [result("signin", "passed")]);
   assert.deepEqual(untracedScenarios(requirements, PLAN), ["checkout", "reset"]);
+});
+
+// ---------------------------------------------------------------------------
+// Quote verification — added after run_6f0284ae, where every quote was real and
+// none of them would have grepped.
+// ---------------------------------------------------------------------------
+
+test("a quote the model reflowed across the document's line wrap still verifies", () => {
+  const document = "**1.1 Sign in.** A shopper signs in with an email address and a password. On\nsuccess the application places the shopper on the catalogue.";
+  assert.equal(
+    quoteAppearsIn("A shopper signs in with an email address and a password. On success the application places the shopper on the catalogue.", document),
+    true,
+    "the wrap is the document's formatting, not a difference in what the quote says",
+  );
+});
+
+test("typographic quotes and dashes a model reflowed are not a mismatch", () => {
+  const document = `The page must say "unavailable" - not render as empty.`;
+  assert.equal(quoteAppearsIn('The page must say “unavailable” — not render as empty.', document), true);
+});
+
+test("a quote the document does not contain is rejected", () => {
+  const document = "A shopper signs in with an email address and a password.";
+  assert.equal(quoteAppearsIn("A shopper signs in with a one-time passcode sent by SMS.", document), false);
+});
+
+test("a quote too short to be evidence does not count as verified", () => {
+  assert.equal(quoteAppearsIn("sign in", "A shopper signs in with an email address."), false);
+});
+
+test("an unverifiable quote is dropped from the requirement, and counted", () => {
+  const document = "1.1 A shopper signs in with an email address and a password.";
+  const { requirements, misquoted } = gateTrace(
+    [
+      { id: "1.1", text: "Sign in", quote: "A shopper signs in with an email address and a password.", coveredBy: ["s1"] },
+      { id: "1.2", text: "Reset", quote: "A shopper resets a password with a link sent by email.", coveredBy: [] },
+    ],
+    [{ id: "s1" } as never],
+    [],
+    document,
+  );
+  assert.deepEqual(misquoted, ["1.2"]);
+  assert.equal(requirements[0].quote, "A shopper signs in with an email address and a password.");
+  assert.equal(requirements[1].quote, undefined, "a citation a reader cannot check is worse than none");
+  assert.equal(requirements[1].id, "1.2", "the requirement itself is still reported");
+});
+
+test("with no document supplied, quotes are carried rather than struck", () => {
+  const { requirements, misquoted } = gateTrace(
+    [{ id: "1.1", text: "Sign in", quote: "Whatever the model said it read.", coveredBy: [] }],
+    [],
+    [],
+  );
+  assert.deepEqual(misquoted, []);
+  assert.equal(requirements[0].quote, "Whatever the model said it read.");
 });

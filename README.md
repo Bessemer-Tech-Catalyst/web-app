@@ -209,6 +209,14 @@ on command, which is what makes the classifier demonstrable rather than merely d
 | **Rename "Basket" to "Bag"** | The nav link and the add button both change wording. The app is perfectly healthy. | `SCRIPT_DRIFT` → the Healer re-proves the control and patches the test |
 | **Break order history** | `GET /api/shoplite/orders` returns 500. The order still saves. | `APP_DEFECT` → **bug filed, Healer withheld, test stays red** |
 
+ShopLite also carries one bug nobody planted, and the record of it. On `run_6f0284ae` the single
+test the pipeline emitted went red, and the classifier called `APP_DEFECT` at 0.72 with cross-test
+evidence: `/shoplite/basket` and `/shoplite/orders` were both rendering to a browser carrying no
+session while `/shoplite` showed a sign-in form — in violation of ShopLite's own PRD §1.4. It was
+right. Those two were client components, `cookies()` is not available to one, and `/shoplite/products`
+had the guard all along, which is exactly the "missing or inconsistent" the classifier named. Both
+are guarded now, and the comment on the fix names the run that found it.
+
 Flip one *between* two stages of a live run and watch what the orchestrator decides. That is the
 demo, and it is the only honest way to test a classifier: generate the suite against a healthy app,
 break the app, then run it. In `run_8b37144b` that produced, with no human in between:
@@ -317,8 +325,14 @@ That third row is the whole value of the table. The naive version of this featur
 requirement whose only scenario the Generator quarantined, and tells a team their PRD is covered
 about a flow nothing ever loaded.
 
-Every requirement also carries a **verbatim quote** from the document, so a reader can check the
-extraction against the PRD in seconds rather than trusting it.
+**A quote the document does not contain is dropped and counted.** Every requirement carries a
+verbatim quote so a reader can check the extraction in seconds — and that was a promise until
+`run_6f0284ae`, where all nineteen quotes were faithful and *none* of them would have grepped,
+because the PRD wraps its lines and the model joined them with spaces. The check is the system's
+now, not the reader's: quotes are verified against text normalised for whitespace and for the
+typographic quotes and dashes a model reflows ASCII into — the document's formatting, not the
+model's claim — and anything that fails is struck, like an invented scenario id. A citation a
+reader cannot check is worse than none, because one wrong row costs a reader the other eighteen.
 
 ---
 
@@ -332,8 +346,8 @@ This repo distinguishes "the code exists" from "a real run produced it", and say
 | Generator, Executor | ✅ real, **verified by a green live run** — 2 tests at 14/14 and 20/20 proven locators, `expected: 2, unexpected: 0`, $0.317 |
 | Classifier, Healer, rerun, ShopLite | ✅ real, **verified by a live run** — `run_8b37144b` classified a 500 as `APP_DEFECT` at 0.94 and left it red, healed a renamed control, and had a patch rejected by the assertion guard. $0.161 |
 | Coverage map, risk scoring | ✅ real and **pinned by 41 unit assertions** — arithmetic with a published weight table, no model involved, so it produces a true ledger even with no API key |
-| Risk review pass, PRD traceability | ✅ real, **driven by a live run** — `run_90f1c9f5` published a ranked five-surface risk ledger and traced 19 PRD requirements with verbatim quotes. That run also proved the pipeline could produce a report with no execution behind it, which is what idea 6 above now prevents |
-| Re-plan on an unbuildable plan, credential hand-off | ✅ real, **pinned by unit assertions**, and both exist because a live run found the defect they fix |
+| Risk review pass, PRD traceability | ✅ real, **verified by a live run** — `run_6f0284ae` published a ranked risk ledger led by *"Place order checkout submission, 95/100"* and traced 19 PRD requirements with 0 invented citations. Its quotes were all faithful and none of them would have grepped, which is what the quote gate below now catches |
+| Re-plan on an unbuildable plan, credential hand-off, quote verification | ✅ real, **pinned by unit assertions**, and every one of them exists because a live run found the defect it fixes |
 
 **The console's fleet-level pages — Overview, Coverage, Defects, Schedule, Targets — describe the
 product around a single run and are driven by seeded data.** Every one of them says so on the page,
@@ -365,7 +379,7 @@ live in front of judges.
 ## Tests
 
 ```bash
-pnpm verify      # typecheck · lint · 117 assertions, ~2s, no API and no browser
+pnpm verify      # typecheck · lint · 123 assertions, ~2s, no API and no browser
 ```
 
 They cover the parts where a silent regression would be invisible and expensive — which in this

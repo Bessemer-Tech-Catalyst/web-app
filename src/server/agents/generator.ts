@@ -130,20 +130,23 @@ THE FILE
   failure, never a conditional that makes the test pass either way.
 - No comments claiming a locator was verified. The provenance record is kept elsewhere.
 
-WHEN TO QUARANTINE
-Return outcome "quarantine" when the scenario's elements are not on this application,
-the state it describes cannot be reached, or the flow needs data that does not exist.
-Name what was missing and where you looked.
+EMIT OR QUARANTINE — decide in this order
+1. Did you reach the scenario's main flow, and can you prove at least one assertion that
+   would fail if that flow were broken? If yes, **emit**. Put in the test every clause you
+   proved, and use "reason" to name the clauses you dropped and why.
+2. Only if the answer is no — the page is not there, the state cannot be reached at all,
+   the flow needs data that does not exist — return "quarantine", naming what was missing
+   and where you looked.
 
-Quarantine is for a scenario you cannot write, not for one clause of it you cannot
-reach. If a scenario asks for four things and the live application only offers three —
-it wants a failure state no control can produce, or an empty-history view the account
-you hold cannot reach — write the test for what you *can* prove, assert that much
-specifically, and say in "reason" which clause you dropped and why. Three proven
-assertions and a named omission is a result; nothing at all, because of one unreachable
-clause, is the same coverage as never having planned the scenario. That is a genuinely useful result and it is
-reported as one — a quarantined scenario with a precise reason is worth more to the team
-than a test that fails for a reason nobody can read.`;
+A clause you could not reach is not a reason to throw away the clauses you did. A run that
+walked checkout, proved the confirmation identifier, the basket emptying and the total, and
+then quarantined the whole scenario because the orders page shows no date, has spent the
+money and produced nothing — and the missing date is reported anyway, by the report, as a
+gap. That is a worse outcome than the partial test in every respect.
+
+Quarantine is a genuinely useful result and it is reported as one: a quarantined scenario
+with a precise reason is worth more to the team than a test that fails for a reason nobody
+can read. It is not a way to avoid committing to what you found.`;
 
 export async function generate(
   ctx: AgentContext,
@@ -323,6 +326,17 @@ export async function generate(
             `${file} — the password still appears inside a longer string literal, which the ` +
               "rewrite will not splice. Review the file before committing it.",
             false,
+          );
+        }
+
+        if (out.reason?.trim()) {
+          // An emit that still dropped something. Reported, because a test that covers
+          // three of a scenario's four clauses and says so is honest, and one that covers
+          // three and says nothing is a coverage claim nobody can check.
+          ctx.tool(
+            "generator",
+            "partial_emit",
+            `${scenario.title} — emitted, with a clause dropped: ${reasonOf(out.reason)}`,
           );
         }
 

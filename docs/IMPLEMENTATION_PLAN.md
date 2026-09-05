@@ -1083,3 +1083,84 @@ deliberately does not implement, so the PRD trace has something true to say.
 - `orchestrator/regenerate.test.mts` — proceed on one test, re-plan on none, escalate when the
   allowance is spent or the budget is gone, that the directives carry the Generator's own sentence,
   and that an over-budget run which *did* emit tests still runs them.
+
+---
+
+## 16. Phase 7, second pass — what two live runs found that the first one could not
+
+§15 was written from `run_90f1c9f5`, which produced nothing. `run_6f0284ae` was the first run of
+the fixed pipeline, and it went the whole way: recon, three plan/critique attempts, generate,
+execute, triage, report — 355 events, $0.19. It found four more things.
+
+### 16.1 The credential fix works, and the Generator still threw the tests away
+
+The authentication scenario was no longer quarantined for a missing password — the Generator typed
+credentials into the live sign-in form and verified the rejection message. That is §15.1 confirmed
+by a model rather than by a unit test.
+
+It then quarantined the scenario anyway, because ShopLite shows no *field-level* validation for a
+blank input. And the checkout scenario, whose reason is worth quoting in full:
+
+> The checkout flow, confirmation identifier, empty basket, kettle line, £42.00 total, and orders
+> navigation were reachable and verified. The orders page does not display an order date, so the
+> complete expected outcome cannot be asserted.
+
+Six things proven, one missing, nothing emitted. §15.2 had added an instruction against exactly
+this. The instruction was not the binding constraint: **the output schema's own description said
+`"emit only if every element the test needs was found on the live page"`**, and a model reads the
+schema. Prose in the system prompt does not overrule the field description sitting next to the
+value it is filling in.
+
+So the schema now describes the rule — emit whenever the main flow was reached and one assertion
+was proven; quarantine only when the flow could not be reached — and the prompt states it as an
+ordered decision rather than a paragraph of encouragement. An emit that dropped a clause reports
+itself as `partial_emit` and names the clause. The Planner was also told that `expected` is *one*
+observable outcome: "the confirmation shows an identifier, a date, the lines and the total" is
+four, and it makes the whole scenario hostage to whichever one the application happens not to
+render.
+
+### 16.2 The one test it did emit found a real bug in ShopLite
+
+The scenario that survived was `protected-route-signed-out-redirect`, and it went red:
+
+```
+Expected pattern: /\/shoplite$/
+Received string:  "http://localhost:3003/shoplite/basket"
+```
+
+The classifier called it `APP_DEFECT` at 0.72 and withheld the Healer, citing three pieces of live
+evidence including a cross-test one: `/shoplite/basket` and `/shoplite/orders` both rendered their
+content to a browser carrying no session, while `/shoplite` showed a sign-in form — *"the route
+guard is missing or inconsistent, not a locator problem."*
+
+It was right. `/shoplite/products` is a server component and had the guard; the other two are
+client components, `cookies()` is not available to one, and nobody noticed. ShopLite's own PRD
+§1.4 requires the redirect. **Nobody planted this bug**, and it is the first defect this project
+found in an application rather than in itself.
+
+Both routes are now server components that check the session and render the interactive half as a
+child. Order history is still fetched from the client, because that is what keeps the `defect`
+switch diagnosable from a page load.
+
+### 16.3 Every quote in the PRD trace was real, and none of them would have grepped
+
+The README's claim is that a verbatim quote per requirement lets a reader check the extraction in
+seconds. The run produced 19 requirements with quotes, all faithful — and not one of them appears
+in `shoplite-prd.md` as a literal string, because the document wraps its lines and the model joined
+them with spaces. A judge doing the ten-second check would have concluded the quotes were invented.
+
+`prd-gate.ts` now verifies them, against text normalised for exactly two things: whitespace, and
+the typographic quotes and dashes a model reflows ASCII into. Both are the document's formatting
+rather than the model's claim. A quote the PRD does not contain is **dropped and counted**, like an
+invented scenario id — a citation a reader cannot check is worse than no citation, because one
+wrong row costs them their trust in the other eighteen.
+
+Six assertions pin it, including that a two-word quote is not evidence and does not verify.
+
+### 16.4 The risk ledger and the PRD trace are live-verified
+
+`run_6f0284ae` published a three-surface risk ledger led by *"Place order checkout submission,
+95/100"*, and traced 19 requirements: 2 exercised, 13 planned-only, 4 uncovered, **0 invented
+citations**. That is the last thing §14.7 said this project owed.
+
+`pnpm verify` — 123 assertions.

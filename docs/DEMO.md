@@ -20,7 +20,7 @@ pnpm dev --port 3002
 
 ```bash
 pnpm demo:reset          # order history cleared, both defect switches off
-pnpm verify              # typecheck, lint, 117 assertions — ~2s, in case a judge asks
+pnpm verify              # typecheck, lint, 123 assertions — ~2s, in case a judge asks
 ```
 
 Have four things open:

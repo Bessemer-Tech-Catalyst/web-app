@@ -427,7 +427,7 @@ function body(s, text, o) {
     fontFace: HEAD, fontSize: 30, bold: true, color: BRIGHT, lineSpacingMultiple: 1.15,
   });
   body(s, "No human between any two of those stages.", { x: M, y: 4.3, w: 11.9, h: 0.4, fontSize: 18, color: EMBER_L });
-  const links = [["SUBMISSION.md", "every requirement → the file that implements it"], ["docs/DEMO.md", "the run of show, and what to say when it breaks"], ["pnpm verify", "typecheck, lint, 117 assertions, ~2 seconds"]];
+  const links = [["SUBMISSION.md", "every requirement → the file that implements it"], ["docs/DEMO.md", "the run of show, and what to say when it breaks"], ["pnpm verify", "typecheck, lint, 123 assertions, ~2 seconds"]];
   links.forEach(([k, v], i) => {
     const x = M + i * 4.03;
     card(s, { x, y: 5.2, w: 3.75, h: 1.25, fill: CARD });

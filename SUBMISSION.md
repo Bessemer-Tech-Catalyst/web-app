@@ -86,7 +86,7 @@ already caught the model in a live run:
 ## 4. How to check the claims yourself
 
 ```bash
-pnpm install && pnpm verify        # typecheck · lint · 117 assertions, ~2s, no API, no browser
+pnpm install && pnpm verify        # typecheck · lint · 123 assertions, ~2s, no API, no browser
 pnpm dev --port 3002               # with OPENAI_API_KEY and ODYSSEY_REAL_AGENTS=all in .env
 pnpm demo:reset && pnpm demo:run   # ShopLite, with the PRD and an intent
 pnpm run:tail <runId>              # the event log, one line per decision

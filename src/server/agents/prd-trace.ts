@@ -113,7 +113,12 @@ export async function tracePrd(
     maxTurns: 4,
   });
 
-  const { requirements, invented } = gateTrace(out.requirements, req.scenarios, req.results);
+  const { requirements, invented, misquoted } = gateTrace(
+    out.requirements,
+    req.scenarios,
+    req.results,
+    ctx.input.prd?.text,
+  );
 
   // The gate's findings are reported, never swallowed. An extraction that invented three
   // references is telling you how much to trust the other forty.
@@ -122,6 +127,16 @@ export async function tracePrd(
       "orchestrator",
       "verify_scenario_references",
       `Struck out ${invented.length} citation(s) naming scenarios the plan does not contain: ${invented.join(", ")}.`,
+      false,
+    );
+  }
+
+  if (misquoted.length) {
+    ctx.tool(
+      "orchestrator",
+      "verify_requirement_quotes",
+      `Dropped ${misquoted.length} quote(s) that do not appear in ${ctx.input.prd?.filename ?? "the document"}: ` +
+        `${misquoted.join(", ")}. The requirement is still reported; the unverifiable citation is not.`,
       false,
     );
   }
