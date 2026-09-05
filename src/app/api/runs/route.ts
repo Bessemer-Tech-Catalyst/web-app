@@ -1,5 +1,6 @@
 import { createRun, listRuns } from "@/server/run-store";
 import { parseRunInput } from "@/server/validate";
+import { requireCiToken } from "@/app/api/auth/require-ci-token";
 
 // The orchestrator spawns browsers and writes files — Node runtime, never cached.
 export const runtime = "nodejs";
@@ -10,6 +11,12 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  // Auth check: if ODYSSEY_CI_TOKEN env var is set, require bearer token
+  const auth = await requireCiToken(req);
+  if (!auth.ok) {
+    return Response.json({ error: auth.error }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await req.json();
