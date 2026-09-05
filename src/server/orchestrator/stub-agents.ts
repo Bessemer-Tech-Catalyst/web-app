@@ -149,7 +149,7 @@ export const stubAgents: Agents = {
       );
       await writeArtifact(ctx.runId, t.file, specFor(t));
       tests.push(t);
-      ctx.artifact("test", t.file, t.title);
+      ctx.artifact("test", t.file, t.title, t.id);
     }
 
     const quarantined: GenerateResult["quarantined"] = [];
@@ -191,7 +191,7 @@ export const stubAgents: Agents = {
       };
       out.push(result);
       if (spec.status === "failed") {
-        ctx.artifact("trace", `results/traces/${spec.testId}.zip`, `Trace — ${test.title}`);
+        ctx.artifact("trace", `results/traces/${spec.testId}.zip`, `Trace — ${test.title}`, spec.testId);
       }
     }
 

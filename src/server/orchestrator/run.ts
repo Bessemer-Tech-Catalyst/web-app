@@ -95,7 +95,8 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
     think: (agent, text) => emit({ type: "agent.thinking", agent, text }),
     tool: (agent, tool, summary, ok = true) =>
       emit({ type: "agent.tool", agent, tool, summary, ok }),
-    artifact: (kind, path, title) => emit({ type: "artifact", kind, path, title }),
+    artifact: (kind, path, title, testId) =>
+      emit({ type: "artifact", kind, path, title, testId }),
     overBudget: () => budgetExceeded,
     spend: (usd, tokensIn, tokensOut) => {
       costUsd += usd;
@@ -531,7 +532,7 @@ export async function runOrchestrator(opts: OrchestratorOptions): Promise<RunSta
             await writeArtifact(runId, proposal.file, proposal.after);
             await writeArtifact(runId, path, unifiedDiff(proposal.before, proposal.after, proposal.file));
           }
-          ctx.artifact("patch", path, `Healed — ${results.get(t.testId)?.title ?? t.testId}`);
+          ctx.artifact("patch", path, `Healed — ${results.get(t.testId)?.title ?? t.testId}`, t.testId);
 
           const rerun = await agents.rerun(ctx, { testId: t.testId, attempt: n + 1, healed: true });
           results.set(rerun.testId, rerun);

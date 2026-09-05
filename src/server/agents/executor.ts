@@ -125,7 +125,7 @@ export async function execute(
     for (const attachment of outcomes.flatMap((r) => r.attachments ?? [])) {
       const kind = attachmentKind(attachment.name, attachment.contentType);
       if (kind && attachment.path) {
-        ctx.artifact(kind, relativeToRun(ctx.runId, attachment.path), `${kind} — ${test.title}`);
+        ctx.artifact(kind, relativeToRun(ctx.runId, attachment.path), `${kind} — ${test.title}`, test.id);
       }
     }
 

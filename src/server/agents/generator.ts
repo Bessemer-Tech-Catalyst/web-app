@@ -355,7 +355,7 @@ export async function generate(
           "verify_locator_provenance",
           `${file} — ${proof.verified}/${proof.total} locators resolved on the live page`,
         );
-        ctx.artifact("test", file, scenario.title);
+        ctx.artifact("test", file, scenario.title, test.id);
         provenance.push({ scenarioId: scenario.id, title: scenario.title, outcome: "emitted", file, proof, ledger: [...ledger] });
       }
     });

@@ -36,11 +36,12 @@ export interface AgentContext {
   think(agent: AgentName, text: string): void;
   /** A tool call the agent made, with its outcome. */
   tool(agent: AgentName, tool: string, summary: string, ok?: boolean): void;
-  /** A file the agent produced. */
+  /** A file the agent produced. `testId` ties it to one generated test, when it is one. */
   artifact(
     kind: "plan" | "test" | "trace" | "screenshot" | "video" | "patch",
     path: string,
     title: string,
+    testId?: string,
   ): void;
   /** Token spend, reported per stage so the budget guard can act mid-run. */
   spend(usd: number, tokensIn: number, tokensOut: number): void;

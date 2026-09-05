@@ -487,6 +487,13 @@ export type OrchestratorEvent = EventBase &
         kind: "plan" | "test" | "trace" | "screenshot" | "video" | "patch";
         path: string;
         title: string;
+        /**
+         * Set when the file belongs to one generated test — its spec, its trace, the
+         * diff that healed it. The Suite panel hangs these off the test's own row, so
+         * the evidence for a result sits with the result rather than in a flat rail
+         * where matching it back to a test is the reader's problem.
+         */
+        testId?: string;
       }
     | { type: "recon.ready"; routes: string[]; authenticated: boolean }
     | { type: "plan.ready"; attempt: number; scenarios: Scenario[] }

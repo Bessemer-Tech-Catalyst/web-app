@@ -169,10 +169,12 @@ export function RunConsole({ runId }: { runId: string }) {
             <div className="flex min-h-0 flex-1 flex-col [&>*]:min-h-0 [&>*]:flex-1">
               {tab === "suite" && (
                 <TestBoard
+                  runId={runId}
                   tests={state.tests}
                   results={state.results}
                   triage={state.triage}
                   heals={state.heals}
+                  artifacts={state.artifacts}
                 />
               )}
               {tab === "activity" && <ActivityFeed activity={state.activity} />}
