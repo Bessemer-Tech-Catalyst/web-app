@@ -92,17 +92,12 @@ export function ReportView({
             >
               ⟳ Rerun
             </Link>
-            <a
+            <Link
               href={`/runs/compare?old=run_example&new=${runId}`}
               className="rounded-md bg-info-500/20 px-2.5 py-1 text-info-400 transition hover:bg-info-500/30"
-              onClick={(e) => {
-                // This would typically find the previous run automatically
-                // For now, we show the template
-                console.log("Compare - use ?old=<oldRunId>&new=" + runId);
-              }}
             >
               Compare
-            </a>
+            </Link>
           </div>
         </div>
       </header>
