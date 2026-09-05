@@ -20,7 +20,7 @@ const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, 
 const out = [];
 
 const INK = "#141414", MUTED = "#5f5b54", LINE = "#c9c2b6", PAPER = "#faf8f5";
-const STAR = "#3f2fd4", DANGER = "#a3231a", GOOD = "#1f6b3a";
+const STAR = "#3f2fd4", DANGER = "#a3231a", GOOD = "#1f6b3a", EMBER = "#b4530a";
 
 function box({ x, y, w, h, title, lines = [], accent = INK, fill = "#ffffff", dash, titleSize = 15 }) {
   out.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="${fill}" stroke="${accent}" stroke-width="${dash ? 1.2 : 1.6}"${dash ? ` stroke-dasharray="${dash}"` : ""}/>`);
@@ -46,7 +46,7 @@ function arrow(x1, y1, x2, y2, { label, dash, color = INK, mid, labelDx = 6, lab
   }
 }
 
-const markers = [INK, STAR, DANGER, GOOD, MUTED, LINE]
+const markers = [INK, STAR, DANGER, GOOD, MUTED, LINE, EMBER]
   .map((c) => `<marker id="a-${c.replace("#", "")}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="${c}"/></marker>`)
   .join("");
 
@@ -83,6 +83,11 @@ arrow(SX + SW / 2, 690, SX + SW / 2, 730);
 out.push(`<path d="M${SX + SW} 435 L${SX + SW + 60} 435 L${SX + SW + 60} 319 L${SX + SW} 319" fill="none" stroke="${STAR}" stroke-width="1.5" marker-end="url(#a-${STAR.replace("#", "")})"/>`);
 out.push(`<text x="${SX + SW + 74}" y="372" font-size="12" font-weight="700" fill="${STAR}">score &lt; 75 and budget left</text>`);
 out.push(`<text x="${SX + SW + 74}" y="390" font-size="12" fill="${MUTED}">→ re-plan against the gaps it just named</text>`);
+
+// the second re-plan loop: a plan that passed critique and could not be built at all
+out.push(`<path d="M${SX + SW} 551 L${SX + SW + 82} 551 L${SX + SW + 82} 300 L${SX + SW} 300" fill="none" stroke="${EMBER}" stroke-width="1.5" marker-end="url(#a-${EMBER.replace("#", "")})"/>`);
+out.push(`<text x="${SX + SW + 96}" y="452" font-size="12" font-weight="700" fill="${EMBER}">nothing emitted, allowance left</text>`);
+out.push(`<text x="${SX + SW + 96}" y="470" font-size="12" fill="${MUTED}">→ re-plan against the quarantine reasons</text>`);
 
 // MCP dotted taps
 for (const y of [213, 551, 773]) arrow(250, 384, SX - 4, y, { dash: "3 3", color: MUTED, mid: `L${292} 384 L${292} ${y} L` });
