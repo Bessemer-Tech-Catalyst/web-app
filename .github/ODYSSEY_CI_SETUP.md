@@ -55,7 +55,7 @@ Go to **Settings → Secrets and variables → Actions** and add:
 | Secret Name | Value |
 |-------------|-------|
 | `ODYSSEY_URL` | Your deployed Odyssey base URL (e.g., `https://odyssey-staging.vercel.app`) |
-| `ODYSSEY_CI_TOKEN` | Same value as `ODYSSEY_CI_TOKEN` env var on the deployed app |
+| `dev` | Bearer token value (same as `ODYSSEY_CI_TOKEN` env var on the deployed app) |
 
 ### Step 3: Wire Preview URL to the Workflow
 

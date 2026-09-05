@@ -21,7 +21,7 @@ jobs:
         id: start-scan
         run: |
           RESPONSE=$(curl -s -X POST \
-            -H "Authorization: Bearer ${{ secrets.ODYSSEY_CI_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.dev }}" \
             -H "Content-Type: application/json" \
             -d "{\"url\": \"${{ steps.preview.outputs.preview_url }}\"}" \
             "${{ secrets.ODYSSEY_URL }}/api/runs")
@@ -47,7 +47,7 @@ jobs:
 
           while [ $ELAPSED -lt $MAX_WAIT ]; do
             RESPONSE=$(curl -s \
-              -H "Authorization: Bearer ${{ secrets.ODYSSEY_CI_TOKEN }}" \
+              -H "Authorization: Bearer ${{ secrets.dev }}" \
               "${{ secrets.ODYSSEY_URL }}/api/runs/$RUN_ID")
 
             LIVE=$(echo "$RESPONSE" | jq -r '.live // empty')
@@ -69,7 +69,7 @@ jobs:
       - name: Download report markdown
         run: |
           curl -s \
-            -H "Authorization: Bearer ${{ secrets.ODYSSEY_CI_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.dev }}" \
             "${{ secrets.ODYSSEY_URL }}/api/runs/${{ steps.start-scan.outputs.run_id }}/report.md" \
             -o report.md
 
@@ -85,7 +85,7 @@ jobs:
         id: summary
         run: |
           RESPONSE=$(curl -s \
-            -H "Authorization: Bearer ${{ secrets.ODYSSEY_CI_TOKEN }}" \
+            -H "Authorization: Bearer ${{ secrets.dev }}" \
             "${{ secrets.ODYSSEY_URL }}/api/runs/${{ steps.start-scan.outputs.run_id }}")
 
           BUGS=$(echo "$RESPONSE" | jq '.state.report.bugs | length // 0')
