@@ -24,6 +24,12 @@ export interface Target {
   lastRunAt: string;
   coverageScore: number;
   trend: number;
+  /**
+   * Where the card's action sends you, when the seeded URL is not somewhere you can
+   * actually point a run. ShopLite is served by this process, so its real URL depends
+   * on the port — the launcher's demo preset resolves it from the request instead.
+   */
+  launch?: string;
 }
 
 export const TARGETS: Target[] = [
@@ -38,6 +44,7 @@ export const TARGETS: Target[] = [
     lastRunAt: new Date(Date.now() - minutes(42)).toISOString(),
     coverageScore: 88,
     trend: +6,
+    launch: "/new?demo=1",
   },
   {
     id: "tgt_todomvc",

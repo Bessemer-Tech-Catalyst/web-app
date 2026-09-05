@@ -14,6 +14,7 @@ import { appendEvent, readEvents, redact } from "./event-log";
 import { selectAgents } from "./agents";
 import { runOrchestrator } from "./orchestrator/run";
 import { DATA_DIR, INDEX_FILE, eventsFile, isValidRunId, runPath } from "./paths";
+import { registerRunProject } from "./project-store";
 import { scaffoldWorkspace } from "./workspace";
 import {
   emptyRunState,
@@ -28,6 +29,12 @@ import {
 export interface RunIndexEntry {
   id: string;
   url: string;
+  /**
+   * Which project this run belongs to. Optional because rows written before the
+   * registry existed do not have one; the Projects page treats those as unattributed
+   * rather than guessing.
+   */
+  projectId?: string;
   status: RunStatus;
   startedAt: string;
   finishedAt?: string;
@@ -48,6 +55,7 @@ type Listener = (event: OrchestratorEvent) => void;
 interface LiveRun {
   id: string;
   input: RunInput;
+  projectId: string;
   status: RunStatus;
   seq: number;
   /** Kept in memory so a reconnecting client is served without touching the disk. */
@@ -73,10 +81,14 @@ const newRunId = () => `run_${randomBytes(4).toString("hex")}`;
 export async function createRun(input: RunInput): Promise<{ id: string }> {
   const id = newRunId();
   await scaffoldWorkspace(id, input);
+  // Registering before the run starts, not after it finishes: a project whose first
+  // run is still going has to be visible while it is going.
+  const projectId = await registerRunProject(input);
 
   const run: LiveRun = {
     id,
     input,
+    projectId,
     status: "running",
     seq: 0,
     events: [],
@@ -89,6 +101,7 @@ export async function createRun(input: RunInput): Promise<{ id: string }> {
   await upsertIndex({
     id,
     url: input.url,
+    projectId,
     status: "running",
     startedAt: new Date().toISOString(),
     intent: input.intent,
@@ -194,6 +207,7 @@ async function finalise(run: LiveRun) {
   await upsertIndex({
     id: run.id,
     url: run.input.url,
+    projectId: run.projectId,
     status: run.status,
     startedAt: report?.startedAt ?? new Date().toISOString(),
     finishedAt: new Date().toISOString(),

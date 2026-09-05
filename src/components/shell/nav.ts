@@ -47,7 +47,7 @@ export const NAV: NavSection[] = [
   {
     title: "Configuration",
     items: [
-      { href: "/targets", label: "Targets", icon: IconTarget, matchPrefix: true },
+      { href: "/projects", label: "Projects", icon: IconTarget, matchPrefix: true },
       { href: "/settings", label: "Settings", icon: IconSettings },
     ],
   },

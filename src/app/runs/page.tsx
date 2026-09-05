@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
 import { Badge, Dot, SampleNotice, Section, type Tone } from "@/components/ui/primitives";
-import { RUN_HISTORY, targetName, type RunHistoryEntry } from "@/lib/mock-fleet";
+import { RUN_HISTORY, targetName } from "@/lib/mock-fleet";
+import { listProjects, projectIdFor } from "@/server/project-store";
 import { listRuns } from "@/server/run-store";
 import { formatDuration, formatRelative, formatUsd, hostOf } from "@/lib/format";
 import type { RunStatus } from "@/lib/types";
@@ -22,9 +23,14 @@ const STATUS_TONE: Record<RunStatus, Tone> = {
 export default async function RunsPage() {
   // Runs this instance has actually driven, ahead of the seeded fleet history the
   // other pages still read from.
-  const real: RunHistoryEntry[] = (await listRuns()).map((r) => ({
+  const [index, projects] = await Promise.all([listRuns(), listProjects()]);
+  // A real run names its project, so the row says "ShopLite" rather than a hostname —
+  // falling back to the host when the project has since been removed from the registry.
+  const projectNames = new Map(projects.map((p) => [p.id, p.name]));
+  const real = index.map((r) => ({
     ...r,
     targetId: "",
+    name: projectNames.get(r.projectId ?? projectIdFor(r.url)) ?? hostOf(r.url),
     trigger: "manual" as const,
   }));
 
@@ -33,7 +39,7 @@ export default async function RunsPage() {
   // and a fixture must never be indistinguishable on the page that lists both.
   const runs = [
     ...real.map((r) => ({ ...r, sample: false })),
-    ...RUN_HISTORY.map((r) => ({ ...r, sample: true })),
+    ...RUN_HISTORY.map((r) => ({ ...r, name: targetName(r.targetId), sample: true })),
   ].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 
   return (
@@ -61,7 +67,7 @@ export default async function RunsPage() {
         <Section>
           {/* Column heads — mirrored by the row grid below. */}
           <div className="hidden grid-cols-[1.6fr_repeat(5,minmax(0,0.62fr))_auto] gap-3 border-b border-base-850 px-6 py-3 text-[10px] font-medium uppercase tracking-[0.12em] text-base-600 lg:grid">
-            <span>Target</span>
+            <span>Project</span>
             <span className="text-right">Pass / fail</span>
             <span className="text-right">Healed</span>
             <span className="text-right">Bugs</span>
@@ -84,7 +90,7 @@ export default async function RunsPage() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-[13px] text-base-200">
-                        {r.targetId ? targetName(r.targetId) : hostOf(r.url)}
+                        {r.name}
                       </span>
                       <Badge tone={r.trigger === "schedule" ? "info" : "neutral"}>
                         {r.trigger}

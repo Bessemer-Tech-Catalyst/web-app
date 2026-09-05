@@ -45,3 +45,16 @@ export function hostOf(url: string): string {
     return url;
   }
 }
+
+/**
+ * Host plus path. `localhost:3000` and `localhost:3000/shoplite` are one server but two
+ * applications, so a project label that stopped at the host would show them as one.
+ */
+export function appLabel(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.host}${u.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return url;
+  }
+}
