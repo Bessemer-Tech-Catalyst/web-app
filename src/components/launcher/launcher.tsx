@@ -1,9 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge, Section, Dot } from "@/components/ui/primitives";
 import { DEFAULT_RUN_OPTIONS, type RunInput, type RunOptions } from "@/lib/types";
 import { cn } from "@/lib/format";
@@ -38,7 +38,11 @@ interface DemoPreset {
 
 export function Launcher() {
   const router = useRouter();
-  const [url, setUrl] = useState("");
+  // Set by a card on the Projects page: `?url=` prefills the field, `?demo=1` runs the
+  // ShopLite fill outright — the bundled demo's real URL depends on the port this
+  // server came up on, so it cannot be put in a link.
+  const query = useSearchParams();
+  const [url, setUrl] = useState(query.get("url") ?? "");
   const [intent, setIntent] = useState("");
   const [prd, setPrd] = useState<{ filename: string; text: string } | null>(null);
   const [username, setUsername] = useState("");
@@ -126,6 +130,22 @@ export function Launcher() {
       setFilling(false);
     }
   }
+
+  /**
+   * `?demo=1` fills the form the moment the page mounts. Guarded by a ref rather than
+   * by the effect's dependencies, because a Strict Mode double-mount would otherwise
+   * fetch the preset twice, and deferred off the effect body because it is a request —
+   * the effect starts it, it does not render from it.
+   */
+  const demoRequested = useRef(false);
+  useEffect(() => {
+    if (query.get("demo") !== "1" || demoRequested.current) return;
+    demoRequested.current = true;
+    void Promise.resolve().then(fillDemo);
+    // `fillDemo` is re-created every render and is deliberately not a dependency: the
+    // ref above already makes this run exactly once, so its identity cannot matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   async function onPrdFile(file: File | undefined) {
     if (!file) return;
